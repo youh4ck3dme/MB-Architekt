@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net (Zero-Trust, Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // STANDALONE ABAC PRIMITIVES
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // 2. VALIDATION BLUEPRINTS (Anti-Update-Gap)
+    
+    // UserProfile helper
+    function isValidUserProfile(profile) {
+      return profile.userId == request.auth.uid
+        && profile.email is string
+        && profile.email.size() <= 200
+        && profile.displayName is string
+        && profile.displayName.size() <= 150
+        && profile.isAnonymous is bool
+        && profile.credits is number
+        && profile.credits >= 0
+        && profile.credits <= 500
+        && profile.createdAt is timestamp;
+    }
+
+    // DesignBoard helper
+    function isValidDesignBoard(board) {
+      return board.id is string
+        && board.id.size() <= 128
+        && board.userId == request.auth.uid
+        && board.roomType is string
+        && board.roomType.size() <= 100
+        && board.style is string
+        && board.style.size() <= 100
+        && board.budget is number
+        && board.budget >= 0
+        && board.colorPalette is string
+        && board.colorPalette.size() <= 500
+        && board.analysisText is string
+        && board.analysisText.size() <= 30000
+        && board.shoppingList is string
+        && board.shoppingList.size() <= 50000
+        && board.createdAt is timestamp;
+    }
+
+    // Match patterns ensuring no-data-exfiltration & user-isolation
+    match /userProfiles/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserProfile(request.resource.data) && request.resource.data.createdAt == request.time;
+      allow update: if isOwner(userId) && isValidUserProfile(request.resource.data) && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false; // Profiles are immutable / persistent
+    }
+
+    match /designBoards/{boardId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isSignedIn() 
+        && request.resource.data.id == boardId
+        && isValidId(boardId)
+        && request.resource.data.userId == request.auth.uid
+        && isValidDesignBoard(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && isValidDesignBoard(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

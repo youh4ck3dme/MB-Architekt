@@ -1,0 +1,100 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "User Profile",
+      "description": "Details of the user's account, active status, and custom Spark simulation credit data.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Unique identifier of the user (UID)."
+        },
+        "email": {
+          "type": "string",
+          "description": "The user's associated email address."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Displays name of the authenticated user."
+        },
+        "isAnonymous": {
+          "type": "boolean",
+          "description": "Determines if signed in as guest observer."
+        },
+        "credits": {
+          "type": "number",
+          "description": "Remaining free tier mockup query credits."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Profile creation timestamp."
+        }
+      },
+      "required": ["userId", "credits", "createdAt"]
+    },
+    "designBoard": {
+      "title": "Design Board",
+      "description": "The generated interior design board, analyzed suggestions, layout coordinates, and shopping list.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID of the design board document."
+        },
+        "userId": {
+          "type": "string",
+          "description": "ID of the user who requested the redesign."
+        },
+        "roomType": {
+          "type": "string",
+          "description": "The type of interior room (e.g., Living Room, Bedroom, Kitchen)."
+        },
+        "style": {
+          "type": "string",
+          "description": "Target aesthetic style (e.g., Swiss-Minimalist, Japandi, Nordic, Industrial)."
+        },
+        "budget": {
+          "type": "number",
+          "description": "Maximum price point constraint."
+        },
+        "originalImage": {
+          "type": "string",
+          "description": "Client-pre-compressed base64 thumbnail or placeholder path."
+        },
+        "redesignedImage": {
+          "type": "string",
+          "description": "Reference link to reconstructed interactive render."
+        },
+        "colorPalette": {
+          "type": "string",
+          "description": "Primary Hex codes or colors in Slovak (JSON serialized or simple listing)."
+        },
+        "analysisText": {
+          "type": "string",
+          "description": "Summary of spatial suggestions, lighting improvements, and structural edits organized in Slovak."
+        },
+        "shoppingList": {
+          "type": "string",
+          "description": "JSON representation of suggested furniture items with placement coordinates and Slovak store references to fit Spark limits."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp."
+        }
+      },
+      "required": ["id", "userId", "roomType", "style", "createdAt"]
+    }
+  },
+  "firestore": {
+    "userProfiles/{userId}": {
+      "schema": "userProfile",
+      "description": "User profiles database."
+    },
+    "designBoards/{boardId}": {
+      "schema": "designBoard",
+      "description": "Generated design boards."
+    }
+  }
+}

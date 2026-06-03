@@ -1,0 +1,9 @@
+{
+  "apiKey": "MOCK_KEY_PLACEHOLDER_FOR_GUEST_BYPASS",
+  "authDomain": "mock-domain.firebaseapp.com",
+  "projectId": "mock-project",
+  "storageBucket": "mock-project.appspot.com",
+  "messagingSenderId": "000000000000",
+  "appId": "1:000000000000:web:ffffffffffffffffffffff",
+  "firestoreDatabaseId": ""
+}

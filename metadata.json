@@ -1,0 +1,6 @@
+{
+  "name": "AI Redizajn Interiéru",
+  "description": "Špičková full-stack aplikácia na AI analýzu a redizajn interiérov, optimalizovaná pre bezplatné limity Google AI a Firebase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
