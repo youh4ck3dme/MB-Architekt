@@ -21,7 +21,8 @@ import {
   Coins,
   History,
   Trash2,
-  FileText
+  FileText,
+  Download
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -483,6 +484,232 @@ function MainDashboard() {
       await StorageService.deleteDesignBoard(user.uid, boardId);
       const boards = await StorageService.loadDesignBoards(user.uid);
       setHistoryBoards(boards);
+    }
+  };
+
+  const handleExportBlueprint = () => {
+    if (!analysisResult) return;
+
+    // Create an in-memory high resolution canvas
+    const canvas = document.createElement("canvas");
+    const size = 1200;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // 1. Draw pure white background (crisp for export & print)
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, size, size);
+
+    // Margin and Layout metrics
+    const margin = 100;
+    const innerSize = size - 2 * margin;
+
+    // 2. Draw modern technical grid in background
+    ctx.strokeStyle = "rgba(28, 28, 28, 0.05)";
+    ctx.lineWidth = 1;
+    const gridSize = 50;
+    for (let x = margin; x <= size - margin; x += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(x, margin);
+      ctx.lineTo(x, size - margin);
+      ctx.stroke();
+    }
+    for (let y = margin; y <= size - margin; y += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(margin, y);
+      ctx.lineTo(size - margin, y);
+      ctx.stroke();
+    }
+
+    // 3. Draw outer thick architectural room layout boundary
+    ctx.strokeStyle = "#1C1C1C";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(margin, margin, innerSize, innerSize);
+
+    // 4. Draw inner dashed perimeter showing safe spacing bounds
+    ctx.strokeStyle = "rgba(28, 28, 28, 0.25)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 6]);
+    ctx.strokeRect(margin + 50, margin + 50, innerSize - 100, innerSize - 100);
+    ctx.setLineDash([]); // Reset line dash
+
+    // 5. Draw rulers (ticks) along the top and left margins for technical aesthetic
+    ctx.fillStyle = "#8D8B84";
+    ctx.font = "9px courier, monospace";
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(28, 28, 28, 0.3)";
+
+    // Top horizontal ruler
+    for (let x = margin; x <= size - margin; x += 25) {
+      const isMajor = (x - margin) % 100 === 0;
+      ctx.beginPath();
+      ctx.moveTo(x, margin);
+      ctx.lineTo(x, margin - (isMajor ? 12 : 6));
+      ctx.stroke();
+      if (isMajor) {
+        ctx.fillText(`${(x - margin) / 2} cm`, x - 12, margin - 16);
+      }
+    }
+
+    // Left vertical ruler
+    for (let y = margin; y <= size - margin; y += 25) {
+      const isMajor = (y - margin) % 100 === 0;
+      ctx.beginPath();
+      ctx.moveTo(margin, y);
+      ctx.lineTo(margin - (isMajor ? 12 : 6), y);
+      ctx.stroke();
+      if (isMajor) {
+        ctx.save();
+        ctx.translate(margin - 18, y + 4);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText(`${(y - margin) / 2} cm`, 0, 0);
+        ctx.restore();
+      }
+    }
+
+    // 6. Draw furniture items as actual technical boxes (using item.width & item.depth)
+    analysisResult.furnitureLayout?.forEach((item, idx) => {
+      // Coordinate inputs are percentages (e.g. 10 to 85)
+      const cx = margin + (Math.max(10, Math.min(85, item.coordinateX)) / 100) * innerSize;
+      const cy = margin + (Math.max(10, Math.min(85, item.coordinateY)) / 100) * innerSize;
+
+      // Map width and depth to pixels (scale item width)
+      const pxWidth = Math.max(80, Math.min(220, (item.width || 120) * 0.9));
+      const pxDepth = Math.max(60, Math.min(180, (item.depth || 80) * 0.9));
+
+      // Draw the rectangle bounding box of the furniture
+      ctx.fillStyle = "rgba(250, 249, 246, 0.75)";
+      ctx.strokeStyle = "#1C1C1C";
+      ctx.lineWidth = 1.5;
+      
+      ctx.beginPath();
+      ctx.rect(cx - pxWidth / 2, cy - pxDepth / 2, pxWidth, pxDepth);
+      ctx.fill();
+      ctx.stroke();
+
+      // Draw light crossed diagonal line indicating architectural symbol representation
+      ctx.strokeStyle = "rgba(28, 28, 28, 0.1)";
+      ctx.beginPath();
+      ctx.moveTo(cx - pxWidth / 2, cy - pxDepth / 2);
+      ctx.lineTo(cx + pxWidth / 2, cy + pxDepth / 2);
+      ctx.moveTo(cx + pxWidth / 2, cy - pxDepth / 2);
+      ctx.lineTo(cx - pxWidth / 2, cy + pxDepth / 2);
+      ctx.stroke();
+
+      // Draw item name inside of the box in miniature
+      ctx.fillStyle = "#1C1C1C";
+      ctx.font = "italic bold 10px Helvetica, Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(item.name.substring(0, 22), cx, cy + pxDepth / 2 - 12);
+
+      // Draw size string inside box
+      ctx.fillStyle = "#8D8B84";
+      ctx.font = "8px courier, monospace";
+      ctx.fillText(`${item.width}x${item.depth} cm`, cx, cy + pxDepth / 2 - 2);
+
+      // Draw solid index dot highlighting position point
+      ctx.fillStyle = "#1C1C1C";
+      ctx.strokeStyle = "#FFFFFF";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy - 10, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Underwrite index number
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 11px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(idx + 1), cx, cy - 10);
+      ctx.textBaseline = "alphabetic"; // restore default
+    });
+
+    // 7. Draw exquisite Title Block in bottom left
+    const blockX = margin + 20;
+    const blockY = size - margin - 150;
+    const blockW = 340;
+    const blockH = 130;
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.strokeStyle = "#1C1C1C";
+    ctx.lineWidth = 2;
+    ctx.fillRect(blockX, blockY, blockW, blockH);
+    ctx.strokeRect(blockX, blockY, blockW, blockH);
+
+    // Inner lines of title block
+    ctx.strokeStyle = "rgba(28, 28, 28, 0.2)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(blockX, blockY + 36);
+    ctx.lineTo(blockX + blockW, blockY + 36);
+    ctx.moveTo(blockX, blockY + 95);
+    ctx.lineTo(blockX + blockW, blockY + 95);
+    ctx.stroke();
+
+    // Title Text fields
+    ctx.fillStyle = "#1C1C1C";
+    ctx.font = "bold 14px Helvetica, Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("AI REDIZAJN INTERIÉRU", blockX + 12, blockY + 24);
+
+    ctx.fillStyle = "#8D8B84";
+    ctx.font = "9px courier, monospace";
+    ctx.fillText("SWISS ARCHITECTURE CORE V2.5", blockX + 175, blockY + 24);
+
+    // Meta details (Room structure, aesthetic theme, budgets etc.)
+    ctx.fillStyle = "#1C1C1C";
+    ctx.font = "bold 10px Helvetica, Arial, sans-serif";
+    ctx.fillText(`MIESTNOSŤ:  ${roomType.toUpperCase()}`, blockX + 12, blockY + 54);
+    ctx.fillText(`ESTETIKA:   ${style.toUpperCase()}`, blockX + 12, blockY + 69);
+    ctx.fillText(`ROZPOČET:   ${budget} EUR`, blockX + 12, blockY + 84);
+
+    ctx.fillStyle = "#8D8B84";
+    ctx.font = "9px courier, monospace";
+    ctx.fillText("MIERKA: 1:50  |  SEVER: ↑", blockX + 12, blockY + 112);
+    ctx.fillText(`DÁTUM: ${new Date().toLocaleDateString("sk-SK")}`, blockX + 175, blockY + 112);
+
+    // 8. Draw compact dynamic Color Palette in the corner of physical Canvas
+    const palX = size - margin - 220;
+    const palY = size - margin - 45;
+    
+    // Title of palette
+    ctx.fillStyle = "#8D8B84";
+    ctx.font = "bold 9px courier, monospace";
+    ctx.fillText("DOPORUČENÁ PALETA FARIEB", palX, palY - 8);
+
+    analysisResult.colorPalette?.forEach((color, cIdx) => {
+      const px = palX + cIdx * 35;
+      
+      // Box
+      ctx.fillStyle = color;
+      ctx.strokeStyle = "rgba(28, 28, 28, 0.2)";
+      ctx.lineWidth = 1;
+      ctx.fillRect(px, palY, 30, 20);
+      ctx.strokeRect(px, palY, 30, 20);
+
+      // Hex code annotation
+      ctx.fillStyle = "rgba(28, 28, 28, 0.6)";
+      ctx.font = "7px courier, monospace";
+      ctx.fillText(color.toUpperCase(), px, palY + 30);
+    });
+
+    // 9. Fire save browser flow!
+    try {
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+      const link = document.createElement("a");
+      link.download = `swiss_redizajn_podorys_${roomType.toLowerCase().replace(/\s+/g, "_")}.jpg`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      // Log interaction in metrics
+      StorageService.updateMetrics(m => m.firebaseStorageRequests += 1);
+      syncMetrics();
+    } catch (e) {
+      console.error("Zlyhal export pôdorysu ako JPEG", e);
     }
   };
 
@@ -972,9 +1199,19 @@ function MainDashboard() {
                       </div>
                       
                       {/* Compass and grid scale marker */}
-                      <div className="text-right shrink-0">
-                        <span className="block text-[10px] font-mono text-gray-400 uppercase">Mierka: 1:50</span>
-                        <span className="block text-[10px] font-mono text-gray-400 uppercase">Sever: ↑</span>
+                      <div className="text-right shrink-0 flex flex-col items-end gap-2">
+                        <div className="text-right">
+                          <span className="block text-[10px] font-mono text-gray-400 uppercase">Mierka: 1:50</span>
+                          <span className="block text-[10px] font-mono text-gray-400 uppercase">Sever: ↑</span>
+                        </div>
+                        <button
+                          onClick={handleExportBlueprint}
+                          className="flex items-center space-x-1.5 bg-[#1C1C1C] hover:bg-black text-[#FAF9F6] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider transition-all select-none cursor-pointer shadow-sm rounded-none active:scale-95 touch-manipulation"
+                          title="Exportovať nákres ako obrázok JPEG"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Export (JPEG)</span>
+                        </button>
                       </div>
                     </div>
 
