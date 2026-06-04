@@ -33,6 +33,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isFirebaseConfigured, auth, loginAnonymously, loginWithGoogle, OperationType } from "./lib/firebase";
 import { StorageService } from "./lib/storage";
 import { DesignBoard, UserProfile, CostMetrics, RoomAnalysisResult, FurnitureLayoutItem } from "./types";
+import { jsPDF } from "jspdf";
 
 // Dynamic motivation messages during loading
 const SUBLIMINAL_MESSAGES = [
@@ -103,6 +104,7 @@ function MainDashboard() {
   const [compareMode, setCompareMode] = useState<"split" | "overlay">("split");
   const [overlayOpacity, setOverlayOpacity] = useState(50);
   const [isExportingComparison, setIsExportingComparison] = useState(false);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<RoomAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
@@ -1005,6 +1007,569 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
       setErrorBanner("Obrázky sa nepodarilo spojiť a uložiť. Dôvodom môžu byť CORS obmedzenia vášho prehliadača. Skúste si obrázky stiahnuť samostatne.");
     } finally {
       setIsExportingComparison(false);
+    }
+  };
+
+  const drawWrappedText = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    startX: number,
+    startY: number,
+    maxWidth: number,
+    lineHeight: number,
+    fontStyle: string,
+    fillStyle: string
+  ): number => {
+    ctx.font = fontStyle;
+    ctx.fillStyle = fillStyle;
+    const paragraphs = text.split("\n");
+    let currentY = startY;
+    
+    for (const paragraph of paragraphs) {
+      if (paragraph.trim() === "") {
+        currentY += lineHeight * 0.4;
+        continue;
+      }
+      const words = paragraph.split(" ");
+      let line = "";
+      
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + " ";
+        const metrics = ctx.measureText(testLine);
+        const testWidth = metrics.width;
+        
+        if (testWidth > maxWidth && n > 0) {
+          ctx.fillText(line.trim(), startX, currentY);
+          line = words[n] + " ";
+          currentY += lineHeight;
+        } else {
+          line = testLine;
+        }
+      }
+      ctx.fillText(line.trim(), startX, currentY);
+      currentY += lineHeight;
+    }
+    return currentY;
+  };
+
+  const handleExportPDFReport = async () => {
+    if (!analysisResult) return;
+    setIsExportingPDF(true);
+    setErrorBanner(null);
+
+    try {
+      // 1. Init PDF document in A4 proportions
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "pt",
+        format: "a4"
+      });
+
+      // Canvas dimensions for sharp 300dpi scaling (1200 x 1697 inside A4)
+      const canvasW = 1200;
+      const canvasH = 1697;
+
+      // ==========================================
+      // PAGE 1: ARCHITECTURAL DESIGN STUDY
+      // ==========================================
+      const page1 = document.createElement("canvas");
+      page1.width = canvasW;
+      page1.height = canvasH;
+      const ctx1 = page1.getContext("2d");
+      if (!ctx1) throw new Error("Nepodarilo sa vytvoriť 2D kontext.");
+
+      // Elegant off-white cream background
+      ctx1.fillStyle = "#FAF9F6";
+      ctx1.fillRect(0, 0, canvasW, canvasH);
+
+      // --- BRAND HEADER ---
+      ctx1.fillStyle = "#1C1C1C";
+      ctx1.fillRect(0, 0, canvasW, 130);
+
+      ctx1.fillStyle = "#FFFFFF";
+      ctx1.font = "bold 23px Helvetica, Arial, sans-serif";
+      ctx1.textAlign = "left";
+      ctx1.fillText("SWISS INTERIÉROVÝ ARCHITEKTONICKÝ REPORT", 60, 52);
+
+      ctx1.fillStyle = "rgba(255, 255, 255, 0.65)";
+      ctx1.font = "11px monospace";
+      ctx1.fillText(`CAD-AI BLUEPRINT REPORT  |  POTENCIÁLNY NÁKUPNÝ PLÁN   |  PROJEKT: #${profile?.userId?.substring(0, 10) || "SWISS-PROJ"}`, 60, 80);
+
+      ctx1.fillStyle = "#D97706";
+      ctx1.font = "bold 13px monospace";
+      ctx1.textAlign = "right";
+      ctx1.fillText("PREMIUM ŠTÚDIA v2.5", canvasW - 60, 52);
+
+      const today = new Date().toLocaleDateString("sk-SK");
+      ctx1.fillStyle = "rgba(255, 255, 255, 0.5)";
+      ctx1.font = "10px monospace";
+      ctx1.fillText(`Dátum vygenerovania: ${today}`, canvasW - 60, 80);
+
+      // --- LEFT COLUMN: 2D Blueprint Schematic ---
+      const bx = 60;
+      const by = 180;
+      const bw = 480;
+      const bh = 480;
+
+      // Card Background for drawing
+      ctx1.fillStyle = "#FFFFFF";
+      ctx1.strokeStyle = "rgba(28, 28, 28, 0.15)";
+      ctx1.lineWidth = 1;
+      ctx1.fillRect(bx, by, bw, bh);
+      ctx1.strokeRect(bx, by, bw, bh);
+
+      // Draw grid behind the layout
+      ctx1.strokeStyle = "rgba(28, 28, 28, 0.04)";
+      ctx1.lineWidth = 1;
+      const innerGrid = bh / 10;
+      for (let x = bx; x <= bx + bw; x += innerGrid) {
+        ctx1.beginPath(); ctx1.moveTo(x, by); ctx1.lineTo(x, by + bh); ctx1.stroke();
+      }
+      for (let y = by; y <= by + bh; y += innerGrid) {
+        ctx1.beginPath(); ctx1.moveTo(bx, y); ctx1.lineTo(bx + bw, y); ctx1.stroke();
+      }
+
+      // Safe blueprint boundary stroke
+      ctx1.strokeStyle = "#1C1C1C";
+      ctx1.lineWidth = 2.5;
+      ctx1.strokeRect(bx + 15, by + 15, bw - 30, bh - 30);
+
+      // Draw actual schematic furniture items
+      analysisResult.furnitureLayout?.forEach((item, idx) => {
+        const cx = bx + 15 + (Math.max(10, Math.min(85, item.coordinateX)) / 100) * (bw - 30);
+        const cy = by + 15 + (Math.max(10, Math.min(85, item.coordinateY)) / 100) * (bh - 30);
+
+        const pxWidth = Math.max(35, Math.min(100, (item.width || 120) * 0.4));
+        const pxDepth = Math.max(30, Math.min(85, (item.depth || 80) * 0.4));
+
+        ctx1.fillStyle = "rgba(250, 249, 246, 0.85)";
+        ctx1.strokeStyle = "#1C1C1C";
+        ctx1.lineWidth = 1.2;
+        ctx1.beginPath();
+        ctx1.rect(cx - pxWidth / 2, cy - pxDepth / 2, pxWidth, pxDepth);
+        ctx1.fill();
+        ctx1.stroke();
+
+        ctx1.strokeStyle = "rgba(28, 28, 28, 0.08)";
+        ctx1.beginPath();
+        ctx1.moveTo(cx - pxWidth / 2, cy - pxDepth / 2); ctx1.lineTo(cx + pxWidth / 2, cy + pxDepth / 2);
+        ctx1.moveTo(cx + pxWidth / 2, cy - pxDepth / 2); ctx1.lineTo(cx - pxWidth / 2, cy + pxDepth / 2);
+        ctx1.stroke();
+
+        ctx1.fillStyle = "#1C1C1C";
+        ctx1.font = "bold 9px Helvetica, sans-serif";
+        ctx1.textAlign = "center";
+        ctx1.fillText(item.name.substring(0, 16), cx, cy + pxDepth / 2 - 10);
+
+        ctx1.fillStyle = "#8D8B84";
+        ctx1.font = "7px courier, monospace";
+        ctx1.fillText(`${item.width}x${item.depth} cm`, cx, cy + pxDepth / 2 - 2);
+
+        ctx1.fillStyle = "#1C1C1C";
+        ctx1.strokeStyle = "#FFFFFF";
+        ctx1.lineWidth = 1.5;
+        ctx1.beginPath();
+        ctx1.arc(cx, cy - 8, 10, 0, Math.PI * 2);
+        ctx1.fill();
+        ctx1.stroke();
+
+        ctx1.fillStyle = "#FFFFFF";
+        ctx1.font = "bold 9px Helvetica, sans-serif";
+        ctx1.textAlign = "center";
+        ctx1.textBaseline = "middle";
+        ctx1.fillText(String(idx + 1), cx, cy - 8);
+        ctx1.textBaseline = "alphabetic";
+      });
+
+      ctx1.fillStyle = "#8D8B84";
+      ctx1.font = "bold 8px monospace";
+      ctx1.textAlign = "right";
+      ctx1.fillText("MIERKA 1:50  |  SEVER: ↑ [STRIKTNÝ PLÁN]", bx + bw - 15, by + bh - 10);
+
+      // --- RIGHT COLUMN: Room metadata & Color Palette info ---
+      const rx = 580;
+      const ry = 180;
+      const rw = 560;
+
+      ctx1.fillStyle = "#FFFFFF";
+      ctx1.strokeStyle = "rgba(28, 28, 28, 0.1)";
+      ctx1.lineWidth = 1;
+      ctx1.fillRect(rx, ry, rw, 480);
+      ctx1.strokeRect(rx, ry, rw, 480);
+
+      ctx1.fillStyle = "#1C1C1C";
+      ctx1.font = "bold 13px monospace";
+      ctx1.textAlign = "left";
+      ctx1.fillText("ZÁKLADNÉ ARCHITEKTONICKÉ METADÁTA", rx + 25, ry + 40);
+
+      ctx1.font = "11px Helvetica, sans-serif";
+      ctx1.fillStyle = "#444444";
+      ctx1.fillText("Typ dotknutej miestnosti:", rx + 25, ry + 75);
+      ctx1.font = "bold 11px Helvetica, sans-serif";
+      ctx1.fillStyle = "#1C1C1C";
+      ctx1.fillText(roomType.toUpperCase(), rx + 225, ry + 75);
+
+      ctx1.font = "11px Helvetica, sans-serif";
+      ctx1.fillStyle = "#444444";
+      ctx1.fillText("Estetika a dizajnový smer:", rx + 25, ry + 100);
+      ctx1.font = "bold 11px Helvetica, sans-serif";
+      ctx1.fillStyle = "#1C1C1C";
+      ctx1.fillText(style.toUpperCase(), rx + 225, ry + 100);
+
+      ctx1.font = "11px Helvetica, sans-serif";
+      ctx1.fillStyle = "#444444";
+      ctx1.fillText("Zvolený finančný plán / limit:", rx + 25, ry + 125);
+      ctx1.font = "bold 11px Helvetica, sans-serif";
+      ctx1.fillStyle = "#1C1C1C";
+      ctx1.fillText(`${budget} EUR`, rx + 225, ry + 125);
+
+      ctx1.font = "bold 12px monospace";
+      ctx1.fillText("ODPORÚČANÁ 10/30/60 FAREBNÁ PALETA (SWISS TÓN)", rx + 25, ry + 180);
+
+      analysisResult.colorPalette?.forEach((color, cIdx) => {
+        const offset = ry + 215 + cIdx * 56;
+        ctx1.fillStyle = color;
+        ctx1.strokeStyle = "rgba(0, 0, 0, 0.15)";
+        ctx1.lineWidth = 1;
+        ctx1.fillRect(rx + 25, offset, 50, 32);
+        ctx1.strokeRect(rx + 25, offset, 50, 32);
+
+        ctx1.fillStyle = "#1C1C1C";
+        ctx1.font = "bold 11px monospace";
+        ctx1.fillText(color, rx + 95, offset + 15);
+
+        ctx1.fillStyle = "#666666";
+        ctx1.font = "9px Helvetica, sans-serif";
+        let usageLabel = "Akcentačný minimalistický tón (10%)";
+        if (cIdx === 0) usageLabel = "Dominantný tón stien a podlahy (60%)";
+        if (cIdx === 1) usageLabel = "Sekundárny tón nábytkových zostáv (30%)";
+        ctx1.fillText(usageLabel, rx + 95, offset + 29);
+      });
+
+      // --- BOTTOM FULL CONTENT: Critique prose ---
+      const criticY = 690;
+      ctx1.fillStyle = "#FFFFFF";
+      ctx1.strokeStyle = "rgba(28, 28, 28, 0.12)";
+      ctx1.lineWidth = 1;
+      ctx1.fillRect(60, criticY, canvasW - 120, 410);
+      ctx1.strokeRect(60, criticY, canvasW - 120, 410);
+
+      ctx1.fillStyle = "#1C1C1C";
+      ctx1.fillRect(60, criticY, canvasW - 120, 40);
+
+      ctx1.fillStyle = "#FFFFFF";
+      ctx1.font = "bold 12px monospace";
+      ctx1.fillText("KRITICKÉ DIZAJNOVÉ ZHODNOTENIE PRIESTORU", 85, criticY + 25);
+
+      const critiqueText = analysisResult.summary || "Architektonické posúdenie priestoru prebehlo úspešne.";
+      drawWrappedText(
+        ctx1,
+        critiqueText,
+        85,
+        criticY + 80,
+        canvasW - 170,
+        21,
+        "11.5px Helvetica, Arial, sans-serif",
+        "#333333"
+      );
+
+      // --- MATERIALS & LIGHTING COLUMNS ---
+      const colY = 1130;
+      const colW = 515;
+      const colH = 430;
+
+      // Materials card
+      ctx1.fillStyle = "#FFFFFF";
+      ctx1.strokeStyle = "rgba(28, 28, 28, 0.1)";
+      ctx1.fillRect(60, colY, colW, colH);
+      ctx1.strokeRect(60, colY, colW, colH);
+
+      ctx1.fillStyle = "#1C1C1C";
+      ctx1.fillRect(60, colY, colW, 35);
+      ctx1.fillStyle = "#FFFFFF";
+      ctx1.font = "bold 11px monospace";
+      ctx1.fillText("ODPORÚČANÉ MATERIÁLY (TEXTÚRY)", 80, colY + 22);
+
+      analysisResult.materials?.forEach((mat, mIdx) => {
+        const rowY = colY + 70 + mIdx * 34;
+        ctx1.fillStyle = "#1C1C1C";
+        ctx1.fillRect(80, rowY - 6, 6, 6);
+
+        ctx1.fillStyle = "#1C1C1C";
+        ctx1.font = "bold 11px Helvetica, sans-serif";
+        ctx1.fillText(mat, 96, rowY);
+      });
+
+      ctx1.fillStyle = "#666666";
+      ctx1.font = "italic 10px Helvetica, sans-serif";
+      drawWrappedText(ctx1, "Materiály boli prísne vyberané tak, aby spolu ladili na báze moderného švajčiarskeho kontrastu teplých a studených zemitých zložiek.", 80, colY + 220, colW - 40, 16, "italic 10px Helvetica, sans-serif", "#666666");
+
+      // Lighting card
+      const lx = 625;
+      ctx1.fillStyle = "#FFFFFF";
+      ctx1.strokeStyle = "rgba(28, 28, 28, 0.1)";
+      ctx1.fillRect(lx, colY, colW, colH);
+      ctx1.strokeRect(lx, colY, colW, colH);
+
+      ctx1.fillStyle = "#1C1C1C";
+      ctx1.fillRect(lx, colY, colW, 35);
+      ctx1.fillStyle = "#FFFFFF";
+      ctx1.font = "bold 11px monospace";
+      ctx1.fillText("ODPORÚČANIA PRE ROZVRSTVENIE SVETLA", lx + 20, colY + 22);
+
+      const tipsText = analysisResult.lightingTips || "Svetelný plán pre správnu ambientnú atmosféru.";
+      drawWrappedText(
+        ctx1,
+        tipsText,
+        lx + 20,
+        colY + 70,
+        colW - 40,
+        20,
+        "11px Helvetica, Arial, sans-serif",
+        "#444444"
+      );
+
+      // Page 1 Footer border
+      ctx1.strokeStyle = "rgba(28, 28, 28, 0.08)";
+      ctx1.lineWidth = 1;
+      ctx1.beginPath();
+      ctx1.moveTo(60, canvasH - 65);
+      ctx1.lineTo(canvasW - 60, canvasH - 65);
+      ctx1.stroke();
+
+      ctx1.fillStyle = "#8D8B84";
+      ctx1.font = "9px monospace";
+      ctx1.textAlign = "left";
+      ctx1.fillText(`Projektová zložka: ${profile?.email || "Vážený zákazník"}  |  Swiss CAD-AI v2.5`, 60, canvasH - 45);
+
+      ctx1.textAlign = "right";
+      ctx1.fillText("Strana 1 z 2  (Architektonická Štúdia)", canvasW - 60, canvasH - 45);
+
+
+      // ==========================================
+      // PAGE 2: DETAILED SHOPPING LIST & DISCIPLINE
+      // ==========================================
+      const page2 = document.createElement("canvas");
+      page2.width = canvasW;
+      page2.height = canvasH;
+      const ctx2 = page2.getContext("2d");
+      if (!ctx2) throw new Error("Nepodarilo sa vytvoriť 2D kontext.");
+
+      ctx2.fillStyle = "#FAF9F6";
+      ctx2.fillRect(0, 0, canvasW, canvasH);
+
+      // --- BRAND HEADER ---
+      ctx2.fillStyle = "#1C1C1C";
+      ctx2.fillRect(0, 0, canvasW, 130);
+
+      ctx2.fillStyle = "#FFFFFF";
+      ctx2.font = "bold 23px Helvetica, Arial, sans-serif";
+      ctx2.textAlign = "left";
+      ctx2.fillText("NÁKUPNÝ ZOZNAM & FINANČNÝ ROZPOČET", 60, 52);
+
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.65)";
+      ctx2.font = "11px monospace";
+      ctx2.fillText("ODPORÚČANÝ SÚPIS NÁBYTKU PRE SLOVENSKÚ DISTRIBUČNÚ SIEŤ", 60, 80);
+
+      ctx2.fillStyle = "#D97706";
+      ctx2.font = "bold 13px monospace";
+      ctx2.textAlign = "right";
+      ctx2.fillText("INVESTIČNÝ KONSOLIDOVANÝ PLÁN", canvasW - 60, 52);
+
+      ctx2.fillStyle = "rgba(255, 255, 255, 0.5)";
+      ctx2.font = "10px monospace";
+      ctx2.fillText(`Miestnosť: ${roomType} | Štýl: ${style}`, canvasW - 60, 80);
+
+      // --- SHOPPING LIST TABLE ---
+      ctx2.textAlign = "left";
+      const tableY = 170;
+      const columnSpacing = {
+        idx: 60,
+        name: 120,
+        cat: 510,
+        dims: 670,
+        store: 810,
+        price: 980
+      };
+
+      // Table dark header row
+      ctx2.fillStyle = "#2D2D2D";
+      ctx2.fillRect(60, tableY, canvasW - 120, 36);
+
+      ctx2.fillStyle = "#FFFFFF";
+      ctx2.font = "bold 10px monospace";
+      ctx2.fillText("#", columnSpacing.idx + 10, tableY + 22);
+      ctx2.fillText("NÁZOV PRVKU A POPIS", columnSpacing.name, tableY + 22);
+      ctx2.fillText("KATEGÓRIA", columnSpacing.cat, tableY + 22);
+      ctx2.fillText("ROZMERY", columnSpacing.dims, tableY + 22);
+      ctx2.fillText("DISTRIBÚTOR v SR", columnSpacing.store, tableY + 22);
+      ctx2.fillText("ODHAD. CENA", columnSpacing.price, tableY + 22);
+
+      let currentTableRowY = tableY + 36;
+      let totalCost = 0;
+
+      // Draw table items dynamically
+      analysisResult.furnitureLayout?.forEach((item, idx) => {
+        totalCost += item.estimatedPrice;
+
+        // Striped rows background
+        ctx2.fillStyle = idx % 2 === 0 ? "#FFFFFF" : "#F5F4EE";
+        ctx2.fillRect(60, currentTableRowY, canvasW - 120, 68);
+
+        // Thin separating border line below the row
+        ctx2.strokeStyle = "rgba(28, 28, 28, 0.08)";
+        ctx2.lineWidth = 1;
+        ctx2.beginPath();
+        ctx2.moveTo(60, currentTableRowY + 68);
+        ctx2.lineTo(canvasW - 60, currentTableRowY + 68);
+        ctx2.stroke();
+
+        // Index
+        ctx2.fillStyle = "#1C1C1C";
+        ctx2.font = "bold 13px Helvetica, sans-serif";
+        ctx2.fillText(String(idx + 1), columnSpacing.idx + 10, currentTableRowY + 30);
+
+        // Name
+        ctx2.fillStyle = "#1C1C1C";
+        ctx2.font = "bold 11px Helvetica, Arial, sans-serif";
+        ctx2.fillText(item.name, columnSpacing.name, currentTableRowY + 25);
+
+        // Short description below name
+        ctx2.fillStyle = "#666666";
+        ctx2.font = "9px Helvetica, sans-serif";
+        const shortDesc = item.description && item.description.length > 70 
+          ? item.description.substring(0, 67) + "..." 
+          : item.description || "Swiss minimalistický nábytkový doplnok.";
+        ctx2.fillText(shortDesc, columnSpacing.name, currentTableRowY + 44);
+
+        // Category
+        ctx2.fillStyle = "#444444";
+        ctx2.font = "10px Helvetica, sans-serif";
+        ctx2.fillText(item.category, columnSpacing.cat, currentTableRowY + 30);
+
+        // Dims
+        ctx2.fillStyle = "#1C1C1C";
+        ctx2.font = "10px monospace";
+        ctx2.fillText(`${item.width} x ${item.depth} cm`, columnSpacing.dims, currentTableRowY + 30);
+
+        // Store
+        ctx2.fillStyle = "#444444";
+        ctx2.font = "10px Helvetica, sans-serif";
+        ctx2.fillText(item.storeRecommendation, columnSpacing.store, currentTableRowY + 30);
+
+        // Price
+        ctx2.fillStyle = "#1C1C1C";
+        ctx2.font = "bold 11px monospace";
+        ctx2.fillText(`${item.estimatedPrice} EUR`, columnSpacing.price, currentTableRowY + 30);
+
+        currentTableRowY += 68;
+      });
+
+      // --- BUDGET SUMMARY SECTION ---
+      let budgetY = currentTableRowY + 40;
+      if (budgetY > canvasH - 510) {
+        budgetY = canvasH - 480;
+      }
+
+      ctx2.fillStyle = "#FFFFFF";
+      ctx2.strokeStyle = "rgba(28, 28, 28, 0.15)";
+      ctx2.lineWidth = 1.5;
+      ctx2.fillRect(60, budgetY, canvasW - 120, 240);
+      ctx2.strokeRect(60, budgetY, canvasW - 120, 240);
+
+      // Section header inside card
+      ctx2.fillStyle = "#1C1C1C";
+      ctx2.fillRect(60, budgetY, canvasW - 120, 40);
+
+      ctx2.fillStyle = "#FFFFFF";
+      ctx2.font = "bold 12px monospace";
+      ctx2.fillText("FINANČNÉ KONSOLIDOVANÉ VYHODNOTENIE ROZPOČTOVEJ DISCIPLÍNY", 85, budgetY + 25);
+
+      // Calculations columns
+      const calcX1 = 100;
+      const calcX2 = 620;
+
+      ctx2.fillStyle = "#444444";
+      ctx2.font = "12px Helvetica, sans-serif";
+      ctx2.fillText("Vyčíslené projektové náklady (Suma položiek):", calcX1, budgetY + 85);
+      ctx2.fillStyle = "#1C1C1C";
+      ctx2.font = "bold 14px monospace";
+      ctx2.fillText(`${totalCost} EUR`, calcX1 + 380, budgetY + 85);
+
+      ctx2.fillStyle = "#444444";
+      ctx2.font = "12px Helvetica, sans-serif";
+      ctx2.fillText("Finančný limit (Váš naplánovaný strop):", calcX1, budgetY + 125);
+      ctx2.fillStyle = "#1C1C1C";
+      ctx2.font = "bold 14px monospace";
+      ctx2.fillText(`${budget} EUR`, calcX1 + 380, budgetY + 125);
+
+      // Accent balance block
+      const isOverBudget = totalCost > budget;
+      const balance = budget - totalCost;
+
+      ctx2.fillStyle = isOverBudget ? "#FEE2E2" : "#D1FAE5";
+      ctx2.fillRect(calcX2, budgetY + 65, 420, 100);
+
+      ctx2.strokeStyle = isOverBudget ? "#EF4444" : "#10B981";
+      ctx2.lineWidth = 1;
+      ctx2.strokeRect(calcX2, budgetY + 65, 420, 100);
+
+      ctx2.fillStyle = isOverBudget ? "#991B1B" : "#065F46";
+      ctx2.font = "bold 11px monospace";
+      ctx2.fillText(isOverBudget ? "⚠️ UPOZORNENRE: ROZPOČET PREKROČENÝ" : "✔ STAV ZOSTÁVAJÚCEJ FINANČNEJ REZERVY", calcX2 + 20, budgetY + 95);
+
+      ctx2.font = "bold 18px Helvetica, Arial, sans-serif";
+      ctx2.fillText(`${balance >= 0 ? "+" : ""}${balance} EUR`, calcX2 + 20, budgetY + 135);
+
+      ctx2.fillStyle = "#55524B";
+      ctx2.font = "italic 10.5px Helvetica, Arial, sans-serif";
+      const advice = isOverBudget 
+        ? "Odporúčame dbať na prísnejšiu materiálovú redukciu prípadne alternatívneho slovenského distribútora na zníženie celkového finančného profilu."
+        : "Finančný plán spĺňa striktné kritériá švajčiarskej úspornosti a zachováva vyváženú rezervu na nepredvídané náklady počas montáže.";
+      drawWrappedText(ctx2, advice, 100, budgetY + 185, canvasW - 200, 16, "italic 10.5px Helvetica, Arial, sans-serif", "#55524B");
+
+      // Page 2 Footer border
+      ctx2.strokeStyle = "rgba(28, 28, 28, 0.08)";
+      ctx2.lineWidth = 1;
+      ctx2.beginPath();
+      ctx2.moveTo(60, canvasH - 65);
+      ctx2.lineTo(canvasW - 60, canvasH - 65);
+      ctx2.stroke();
+
+      ctx2.fillStyle = "#8D8B84";
+      ctx2.font = "9px monospace";
+      ctx2.textAlign = "left";
+      ctx2.fillText("Vypracované švajčiarskym algoritmom CAD-AI v spolupráci s dizajnérom.", 60, canvasH - 45);
+
+      ctx2.textAlign = "right";
+      ctx2.fillText("Strana 2 z 2  (Nákupný Plán & Rozpočet)", canvasW - 60, canvasH - 45);
+
+      // ==========================================
+      // STITCHING THEM INTO PDF & SAVING
+      // ==========================================
+      const addCanvasToPDF = (canvasObj: HTMLCanvasElement, pageIdx: number) => {
+        const imgData = canvasObj.toDataURL("image/jpeg", 0.94);
+        if (pageIdx > 0) {
+          doc.addPage();
+        }
+        doc.addImage(imgData, "JPEG", 0, 0, 595.28, 841.89, `pdf_page_${pageIdx}`, "MEDIUM");
+      };
+
+      addCanvasToPDF(page1, 0);
+      addCanvasToPDF(page2, 1);
+
+      // Save PDF
+      doc.save(`swiss-architektonicky-report-${roomType.toLowerCase().replace(/\s+/g, "_")}.pdf`);
+
+      // Increment metrics tracker
+      StorageService.updateMetrics(m => m.firebaseStorageRequests += 1);
+      syncMetrics();
+
+    } catch (err: any) {
+      console.error("Export do PDF zlyhal.", err);
+      setErrorBanner("Chyba exportu PDF: " + (err?.message || String(err)));
+    } finally {
+      setIsExportingPDF(false);
     }
   };
 
@@ -2035,6 +2600,37 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                 {activeTab === "analysis" && (
                   <div className="space-y-8 animate-fade-in text-gray-900">
                     
+                    {/* PDF Export Banner */}
+                    <div className="bg-[#FAF8F5] border border-[#1C1C1C]/10 p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="space-y-1 text-center sm:text-left">
+                        <h4 className="font-display font-bold text-sm text-gray-900 flex items-center justify-center sm:justify-start space-x-2">
+                          <FileText className="w-4 h-4 text-[#D97706]" />
+                          <span>Kompletná Architektonická Štúdia v PDF</span>
+                        </h4>
+                        <p className="text-[11px] text-gray-500 max-w-lg">
+                          Stiahnite si vysoko detailný, tlačený report s 2D plánom, odporúčanými materiálmi, farebným rozborom a kompletným nákupným zoznamom.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleExportPDFReport}
+                        disabled={isExportingPDF}
+                        id="export-pdf-report-btn-analysis"
+                        className="w-full sm:w-auto px-5 py-2.5 bg-[#1C1C1C] text-white hover:bg-[#333333] font-mono text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {isExportingPDF ? (
+                          <>
+                            <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            <span>Generujem PDF...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Stiahnuť PDF Report</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
                     {/* Slovak critique segment */}
                     <div className="space-y-3">
                       <h4 className="font-display font-semibold text-lg text-gray-900 tracking-tight flex items-center space-x-2">
@@ -2126,6 +2722,37 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                           Nábytok prísne prispôsobený slovenskej distribučnej sieti a cenovému tónu.
                         </p>
                       </div>
+                    </div>
+
+                    {/* PDF Export Banner */}
+                    <div className="bg-[#FAF8F5] border border-[#1C1C1C]/10 p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="space-y-1 text-center sm:text-left">
+                        <h4 className="font-display font-bold text-sm text-gray-900 flex items-center justify-center sm:justify-start space-x-2">
+                          <FileText className="w-4 h-4 text-[#D97706]" />
+                          <span>Kompletná Architektonická Štúdia v PDF</span>
+                        </h4>
+                        <p className="text-[11px] text-gray-500 max-w-lg">
+                          Stiahnite si vysoko detailný, tlačený report s 2D plánom, odporúčanými materiálmi, farebným rozborom a kompletným nákupným zoznamom.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleExportPDFReport}
+                        disabled={isExportingPDF}
+                        id="export-pdf-report-btn-shopping"
+                        className="w-full sm:w-auto px-5 py-2.5 bg-[#1C1C1C] text-white hover:bg-[#333333] font-mono text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {isExportingPDF ? (
+                          <>
+                            <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            <span>Generujem PDF...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Stiahnuť PDF Report</span>
+                          </>
+                        )}
+                      </button>
                     </div>
 
                     <span className="block md:hidden text-[9px] font-mono text-gray-500 bg-[#1C1C1C]/5 py-1.5 px-3 mb-2 text-center select-none animate-pulse uppercase tracking-wider">

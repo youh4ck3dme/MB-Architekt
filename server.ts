@@ -252,7 +252,7 @@ function getPremiumMockResponse(roomType: string, style: string, budget: number)
 
 // 2. Redesign POST api
 async function tryGenerateMistralImage(style: string, roomType: string, summary: string, materials: string[], key: string): Promise<string | null> {
-  if (!key || key === "MY_MISTRAL_API_KEY") return null;
+  if (!key || key.trim() === "" || key === "MY_MISTRAL_API_KEY") return null;
   try {
     console.log("Automatically generating photorealistic design using Mistral flux-pro-latest...");
     const matsText = materials && materials.length > 0 ? materials.join(", ") : "premium natural materials";
@@ -268,8 +268,7 @@ async function tryGenerateMistralImage(style: string, roomType: string, summary:
         model: "flux-pro-latest",
         prompt: prompt,
         n: 1,
-        size: "1024x1024",
-        response_format: "url"
+        size: "1024x1024"
       })
     });
 
@@ -281,10 +280,11 @@ async function tryGenerateMistralImage(style: string, roomType: string, summary:
         return url;
       }
     } else {
-      console.warn("Mistral image generation failed:", await response.text());
+      const errorText = await response.text();
+      console.log(`[Mistral Image Gen Status] API returned error status ${response.status}: ${errorText.substring(0, 150)}...`);
     }
-  } catch (err) {
-    console.error("Error generating Mistral image:", err);
+  } catch (err: any) {
+    console.log("[Mistral Image Gen Warning] Network or operational failure: ", err?.message || err);
   }
   return null;
 }
