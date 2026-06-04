@@ -57,17 +57,26 @@ const AFTER_IMAGES_MAPPING: Record<string, Record<string, string>> = {
   "Obývacia izba": {
     "Swiss-Minimalist": "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80",
     "Japandi": "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1200&q=80",
-    "Nordic": "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=1200&q=80"
+    "Nordic": "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=1200&q=80",
+    "Industrial": "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?auto=format&fit=crop&w=1200&q=80"
   },
   "Spálňa": {
     "Swiss-Minimalist": "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80",
     "Japandi": "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&w=1200&q=80",
-    "Nordic": "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80"
+    "Nordic": "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80",
+    "Industrial": "https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&w=1200&q=80"
   },
   "Kuchyňa": {
     "Swiss-Minimalist": "https://images.unsplash.com/photo-1556912173-3bb406ef7e77?auto=format&fit=crop&w=1200&q=80",
     "Japandi": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
-    "Nordic": "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1200&q=80"
+    "Nordic": "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1200&q=80",
+    "Industrial": "https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=1200&q=80"
+  },
+  "Kúpeľňa": {
+    "Swiss-Minimalist": "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80",
+    "Japandi": "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=1200&q=80",
+    "Nordic": "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80",
+    "Industrial": "https://images.unsplash.com/photo-1604014237800-1c9102c219da?auto=format&fit=crop&w=1200&q=80"
   }
 };
 
@@ -91,6 +100,8 @@ function MainDashboard() {
   const [customAfterUrl, setCustomAfterUrl] = useState<string | null>(null);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [sliderPosition, setSliderPosition] = useState(50);
+  const [compareMode, setCompareMode] = useState<"split" | "overlay">("split");
+  const [overlayOpacity, setOverlayOpacity] = useState(50);
   const [analysisResult, setAnalysisResult] = useState<RoomAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
@@ -345,6 +356,7 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
       "Obývacia izba": "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=800&q=80",
       "Spálňa": "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?auto=format&fit=crop&w=800&q=80",
       "Kuchyňa": "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=800&q=80",
+      "Kúpeľňa": "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80",
     };
     
     setLoading(true);
@@ -1089,8 +1101,8 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
               <label className="block text-xs font-mono tracking-wider uppercase text-gray-500">
                 Typ Miestnosti
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                {["Obývacia izba", "Spálňa", "Kuchyňa"].map((room) => (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {["Obývacia izba", "Spálňa", "Kuchyňa", "Kúpeľňa"].map((room) => (
                   <button
                     key={room}
                     onClick={() => setRoomType(room)}
@@ -1445,68 +1457,171 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                     </div>
 
                     {/* INTERACTIVE COMPARISON BLOCK */}
-                    <div className="space-y-4">
-                      <span className="text-xs font-mono tracking-wider text-gray-400 uppercase block font-bold">
-                        Potiahnite posuvník pre vizuálne porovnanie
-                      </span>
-
-                      <div className="relative aspect-video w-full max-w-4xl mx-auto overflow-hidden border border-[#1C1C1C]/10 shadow-md bg-gray-100 select-none">
-                        
-                        {/* RIGHT IMAGE (AFTER): Gorgeous Redesigned rendering */}
-                        <img 
-                          src={customAfterUrl || (AFTER_IMAGES_MAPPING[roomType]?.[style] || "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80")} 
-                          alt="Po redizajne" 
-                          className="absolute inset-0 w-full h-full object-cover" 
-                          referrerPolicy="no-referrer"
-                        />
-                        <div className="absolute top-4 right-4 bg-[#1C1C1C]/80 backdrop-blur-xs px-2.5 py-1 text-[10px] text-white font-mono uppercase tracking-wider select-none z-10 border border-white/20">
-                          {customAfterUrl ? "Po (Vlastný AI Vizuál)" : "Po (Architektonický Návrh)"}
+                    <div className="space-y-6">
+                      {/* Interactive toggle header for modes */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gray-50/80 p-4 border border-[#1C1C1C]/10 rounded-xs">
+                        <div className="space-y-1">
+                          <span className="text-xs font-mono tracking-wider text-gray-400 uppercase block font-semibold">
+                            Interaktívny Nástroj Porovnania
+                          </span>
+                          <p className="text-[11px] text-gray-500">
+                            Vyberte si medzi bočným rezom (Split) a prelínaním (Overlay s opacitou) na detailné posúdenie zmien.
+                          </p>
                         </div>
-
-                        {/* LEFT IMAGE (BEFORE): Original design (with a clip-path revealing based on slider position) */}
-                        <div 
-                          className="absolute inset-y-0 left-0 overflow-hidden z-25"
-                          style={{ width: `${sliderPosition}%` }}
-                        >
-                          <img 
-                            src={imageSrc || "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1200&q=80"} 
-                            alt="Pred úpravou" 
-                            className="absolute inset-0 w-full h-full object-cover" 
-                            style={{ width: "100%", maxWidth: "none" }}
-                            referrerPolicy="no-referrer"
-                          />
+                        <div className="flex items-center space-x-1 bg-white p-1 border border-[#1C1C1C]/10 self-start sm:self-auto shrink-0 select-none">
+                          <button
+                            onClick={() => setCompareMode("split")}
+                            className={`px-3 py-1.5 text-[11px] font-mono uppercase tracking-wider cursor-pointer transition-all flex items-center space-x-1.5 ${
+                              compareMode === "split"
+                                ? "bg-[#1C1C1C] text-white font-semibold"
+                                : "text-gray-600 hover:text-black hover:bg-gray-50"
+                            }`}
+                          >
+                            <span>↔ Bočný Rez (Split)</span>
+                          </button>
+                          <button
+                            onClick={() => setCompareMode("overlay")}
+                            className={`px-3 py-1.5 text-[11px] font-mono uppercase tracking-wider cursor-pointer transition-all flex items-center space-x-1.5 ${
+                              compareMode === "overlay"
+                                ? "bg-[#1C1C1C] text-white font-semibold"
+                                : "text-gray-600 hover:text-black hover:bg-gray-50"
+                            }`}
+                          >
+                            <Layers className="w-3 h-3" />
+                            <span>Prekrytie (Overlay)</span>
+                          </button>
                         </div>
-                        <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-xs px-2.5 py-1 text-[10px] text-[#1C1C1C] font-mono uppercase tracking-wider select-none z-10 border border-black/10">
-                          Pred (Pôvodný Stav)
-                        </div>
+                      </div>
 
-                        {/* SLIDER CONTROLLER SPLIT BAR */}
-                        <div 
-                          className="absolute inset-y-0 w-1 bg-white cursor-ew-resize z-30 shadow-[0_0_10px_rgba(0,0,0,0.5)]"
-                          style={{ left: `${sliderPosition}%` }}
-                        >
-                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white text-black shadow-lg flex items-center justify-center font-bold text-xs select-none">
-                            ↔
+                      {compareMode === "split" ? (
+                        <div className="space-y-4">
+                          <div className="relative aspect-video w-full max-w-4xl mx-auto overflow-hidden border border-[#1C1C1C]/10 shadow-md bg-gray-100 select-none">
+                            
+                            {/* RIGHT IMAGE (AFTER): Gorgeous Redesigned rendering */}
+                            <img 
+                              src={customAfterUrl || (AFTER_IMAGES_MAPPING[roomType]?.[style] || "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80")} 
+                              alt="Po redizajne" 
+                              className="absolute inset-0 w-full h-full object-cover" 
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="absolute top-4 right-4 bg-[#1C1C1C]/80 backdrop-blur-xs px-2.5 py-1 text-[10px] text-white font-mono uppercase tracking-wider select-none z-10 border border-white/20">
+                              {customAfterUrl ? "Po (Vlastný AI Vizuál)" : "Po (Architektonický Návrh)"}
+                            </div>
+
+                            {/* LEFT IMAGE (BEFORE): Original design (with a clip-path revealing based on slider position) */}
+                            <div 
+                              className="absolute inset-y-0 left-0 overflow-hidden z-25"
+                              style={{ width: `${sliderPosition}%` }}
+                            >
+                              <img 
+                                src={imageSrc || "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1200&q=80"} 
+                                alt="Pred úpravou" 
+                                className="absolute inset-0 w-full h-full object-cover" 
+                                style={{ width: "100%", maxWidth: "none" }}
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+                            <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-xs px-2.5 py-1 text-[10px] text-[#1C1C1C] font-mono uppercase tracking-wider select-none z-10 border border-black/10">
+                              Pred (Pôvodný Stav)
+                            </div>
+
+                            {/* SLIDER CONTROLLER SPLIT BAR */}
+                            <div 
+                              className="absolute inset-y-0 w-1 bg-white cursor-ew-resize z-30 shadow-[0_0_10px_rgba(0,0,0,0.5)]"
+                              style={{ left: `${sliderPosition}%` }}
+                            >
+                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white text-black shadow-lg flex items-center justify-center font-bold text-xs select-none">
+                                ↔
+                              </div>
+                            </div>
+
+                            {/* HIDDEN INVISIBLE RANGE INPUT OVERLAY FOR ULTRA SMOOTH INTERACTION */}
+                            <input 
+                              type="range" 
+                              min="0" 
+                              max="100" 
+                              value={sliderPosition} 
+                              onChange={(e) => setSliderPosition(Number(e.target.value))}
+                              className="absolute inset-0 opacity-0 w-full h-full cursor-ew-resize z-40"
+                            />
+                          </div>
+
+                          {/* SLIDER ASSISTANCE */}
+                          <div className="flex justify-between text-[11px] font-mono text-gray-400 px-1 max-w-4xl mx-auto">
+                            <span>← Pôvodný poškodený/prázdny stav</span>
+                            <span className="animate-pulse text-gray-500 font-semibold">Tiahnite myšou/kliknite na plochu pre rez</span>
+                            <span>Nový Swiss Minimalistický vizuál →</span>
                           </div>
                         </div>
+                      ) : (
+                        /* OVERLAY STATE COMPONENT WITH HIGH FIDELITY OPACITY TRANSITION */
+                        <div className="space-y-4">
+                          <div className="relative aspect-video w-full max-w-4xl mx-auto overflow-hidden border border-[#1C1C1C]/10 shadow-md bg-gray-100 select-none">
+                            {/* Base Image: Before */}
+                            <img 
+                              src={imageSrc || "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1200&q=80"} 
+                              alt="Pred úpravou" 
+                              className="absolute inset-0 w-full h-full object-cover" 
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-xs px-2.5 py-1 text-[10px] text-[#1C1C1C] font-mono uppercase tracking-wider select-none z-10 border border-black/10">
+                              Pred (Pôvodný Stav)
+                            </div>
 
-                        {/* HIDDEN INVISIBLE RANGE INPUT OVERLAY FOR ULTRA SMOOTH INTERACTION */}
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max="100" 
-                          value={sliderPosition} 
-                          onChange={(e) => setSliderPosition(Number(e.target.value))}
-                          className="absolute inset-0 opacity-0 w-full h-full cursor-ew-resize z-40"
-                        />
-                      </div>
+                            {/* Overlay Image: After with inline style controlled opacity */}
+                            <div 
+                              className="absolute inset-0 transition-opacity duration-75 ease-out"
+                              style={{ opacity: overlayOpacity / 100 }}
+                            >
+                              <img 
+                                src={customAfterUrl || (AFTER_IMAGES_MAPPING[roomType]?.[style] || "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80")} 
+                                alt="Po redizajne" 
+                                className="absolute inset-0 w-full h-full object-cover" 
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+                            <div 
+                              className="absolute top-4 right-4 bg-[#1C1C1C]/80 backdrop-blur-xs px-2.5 py-1 text-[10px] text-white font-mono uppercase tracking-wider select-none z-10 border border-white/20 transition-opacity duration-150"
+                              style={{ opacity: Math.max(0.4, overlayOpacity / 100) }}
+                            >
+                              {customAfterUrl ? "Po (Vlastný AI Vizuál)" : "Po (Architektonický Návrh)"}
+                            </div>
 
-                      {/* SLIDER ASSISTANCE */}
-                      <div className="flex justify-between text-[11px] font-mono text-gray-400 px-1">
-                        <span>← Pôvodný poškodený/prázdny stav</span>
-                        <span className="animate-pulse text-gray-500 font-semibold">Tiahnite myšou/kliknite na plochu pre rez</span>
-                        <span>Nový Swiss Minimalistický vizuál →</span>
-                      </div>
+                            {/* Center-Bottom opacity value display badge */}
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-[#1C1C1C]/90 backdrop-blur-xs px-3 py-1 border border-white/10 text-[10px] font-mono text-white text-center z-10 select-none">
+                              Priehľadnosť: <span className="text-amber-400 font-bold">{overlayOpacity}%</span>
+                            </div>
+                          </div>
+
+                          {/* SLIDER CONTROL STATION */}
+                          <div className="bg-[#FAF8F5] border border-[#1C1C1C]/10 p-5 max-w-4xl mx-auto">
+                            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                              <div className="flex items-center space-x-3">
+                                <span className="p-2 bg-[#1C1C1C]/5 border border-[#1C1C1C]/10 text-gray-700">
+                                  <Layers className="w-4 h-4" />
+                                </span>
+                                <div>
+                                  <span className="text-xs font-mono font-bold uppercase text-gray-700 block">Prelínanie Obrázkov</span>
+                                  <span className="text-[10px] text-gray-400">Posúvaním meníte viditeľnosť nového dizajnu</span>
+                                </div>
+                              </div>
+
+                              <div className="w-full sm:w-72 flex items-center space-x-3 select-none">
+                                <span className="text-[10px] font-mono text-gray-400 uppercase">Pred (0%)</span>
+                                <input 
+                                  type="range" 
+                                  min="0" 
+                                  max="100" 
+                                  value={overlayOpacity} 
+                                  onChange={(e) => setOverlayOpacity(Number(e.target.value))}
+                                  className="flex-1 accent-[#1C1C1C] h-1 bg-gray-200 cursor-ew-resize"
+                                />
+                                <span className="text-[10px] font-mono text-black font-semibold uppercase">Po ({overlayOpacity}%)</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* PROMPT GENERATION TOOL FOR MISTRAL / MIDJOURNEY GENERATORS */}
