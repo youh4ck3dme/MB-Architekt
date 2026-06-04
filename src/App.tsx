@@ -94,6 +94,7 @@ function MainDashboard() {
   const [analysisResult, setAnalysisResult] = useState<RoomAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
   const [hoveredFurniture, setHoveredFurniture] = useState<FurnitureLayoutItem | null>(null);
   const [selectedFurniture, setSelectedFurniture] = useState<FurnitureLayoutItem | null>(null);
 
@@ -218,15 +219,34 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
     setupGuestSession(storedUid);
   };
 
-  // Loading animation sequence
+  // Loading animation sequence & progress indicator simulation
   useEffect(() => {
     let interval: NodeJS.Timeout;
+    let progressInterval: NodeJS.Timeout;
     if (loading) {
+      setProgress(5);
+      setLoadingMessageIndex(0);
       interval = setInterval(() => {
         setLoadingMessageIndex((prev) => (prev + 1) % SUBLIMINAL_MESSAGES.length);
-      }, 2200);
+      }, 2500);
+
+      // Non-linear progress simulation
+      progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev < 30) return Number((prev + Math.random() * 8 + 4).toFixed(1)); // fast up to 30
+          if (prev < 65) return Number((prev + Math.random() * 3 + 1.2).toFixed(1)); // medium up to 65
+          if (prev < 88) return Number((prev + Math.random() * 1.5 + 0.4).toFixed(1)); // slower up to 88
+          if (prev < 98) return Number((prev + Math.random() * 0.4 + 0.1).toFixed(1)); // very slow crawl near the end
+          return prev;
+        });
+      }, 400);
+    } else {
+      setProgress(0);
     }
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      clearInterval(progressInterval);
+    };
   }, [loading]);
 
   // Automated HTTP 429 countdown ticker
@@ -1221,27 +1241,95 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
           {loading && (
             <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white/95 select-none animate-fade-in relative z-20">
               <div className="w-16 h-16 border border-[#1C1C1C]/10 flex items-center justify-center mb-6 relative">
-                <div className="absolute inset-0 border-2 border-t-[#1C1C1C] border-b-transparent border-l-transparent border-r-transparent animate-spin" />
+                <div 
+                  className="absolute inset-0 border-2 border-t-[#1C1C1C] border-b-transparent border-l-transparent border-r-transparent animate-spin" 
+                  style={{ animationDuration: '0.8s' }}
+                />
                 <Building className="w-6 h-6 text-[#1C1C1C]" />
               </div>
-              <h3 className="font-display font-medium text-lg mb-2 text-center">AI Redizajnujeme tvoj Priestor...</h3>
               
-              <AnimatePresence mode="wait">
-                <motion.p 
-                  key={loadingMessageIndex}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.3 }}
-                  className="text-xs font-mono text-gray-500 text-center max-w-sm"
-                >
-                  {SUBLIMINAL_MESSAGES[loadingMessageIndex]}
-                </motion.p>
-              </AnimatePresence>
+              <h3 className="font-display font-medium text-lg mb-1 text-center">AI Redizajnujeme tvoj Priestor...</h3>
+              
+              {/* Dynamic Subheader based on the phase */}
+              <p className="text-xs font-mono text-[#1C1C1C]/60 mb-6 uppercase tracking-wider">
+                {progress < 25 && "1. Skenovanie & Pôdorys"}
+                {progress >= 25 && progress < 50 && "2. Modelovanie Perspektívy"}
+                {progress >= 50 && progress < 75 && "3. Rozvrhnutie Interiéru"}
+                {progress >= 75 && "4. Fotorealistické Finišovanie"}
+              </p>
+
+              {/* Minimalist Progress Meter Container */}
+              <div className="w-full max-w-md bg-gray-100 border border-gray-200/60 p-5 mb-6 shadow-sm">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-mono font-medium text-gray-400 uppercase tracking-widest">
+                    Postup Výpočtu
+                  </span>
+                  <span className="text-xs font-mono font-semibold text-[#1C1C1C] bg-[#1C1C1C]/5 px-2 py-0.5 border border-[#1C1C1C]/10">
+                    {Math.round(progress)}%
+                  </span>
+                </div>
+
+                {/* Actual Bar */}
+                <div className="w-full h-2 bg-gray-200/80 overflow-hidden relative">
+                  <div 
+                    className="h-full bg-gradient-to-r from-gray-700 to-[#1C1C1C] transition-all duration-300 ease-out"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+
+                {/* Subliminal status message ticker */}
+                <div className="mt-4 min-h-[16px] flex items-center justify-center">
+                  <AnimatePresence mode="wait">
+                    <motion.p 
+                      key={loadingMessageIndex}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.25 }}
+                      className="text-[11px] font-mono text-gray-500 text-center"
+                    >
+                      {SUBLIMINAL_MESSAGES[loadingMessageIndex]}
+                    </motion.p>
+                  </AnimatePresence>
+                </div>
+              </div>
+
+              {/* Progress Stage Nodes */}
+              <div className="w-full max-w-sm grid grid-cols-4 gap-2 mb-2">
+                {[
+                  { label: "Skenovanie", minP: 0 },
+                  { label: "Štruktúra", minP: 25 },
+                  { label: "Zariadenie", minP: 50 },
+                  { label: "Vizualizácia", minP: 75 }
+                ].map((stg, sIdx) => {
+                  const isActive = progress >= stg.minP;
+                  const isCompleted = progress >= (sIdx === 3 ? 98 : [25, 50, 75][sIdx]);
+                  return (
+                    <div key={stg.label} className="flex flex-col items-center text-center">
+                      <div className={`w-3.5 h-3.5 rounded-full border border-2 flex items-center justify-center mb-1.5 transition-colors duration-300 ${
+                        isCompleted 
+                          ? 'bg-[#1C1C1C] border-[#1C1C1C]' 
+                          : isActive 
+                            ? 'bg-amber-500/10 border-amber-500 animate-pulse' 
+                            : 'bg-white border-gray-200'
+                      }`}>
+                        {isCompleted && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                        )}
+                      </div>
+                      <span className={`text-[9px] font-mono tracking-wider transition-colors duration-300 uppercase ${
+                        isActive ? 'text-[#1C1C1C] font-semibold' : 'text-gray-400'
+                      }`}>
+                        {stg.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
 
               {retryTimerActive && (
-                <span className="text-[10px] font-mono text-amber-600 bg-amber-50 px-2.5 py-1 uppercase tracking-wider border border-amber-200 mt-4">
-                  Doba obnovenia: {countdown}s
+                <span className="text-[10px] font-mono text-amber-600 bg-amber-50 px-2.5 py-1 uppercase tracking-wider border border-amber-200 mt-4 animate-pulse">
+                  Automatický pokus o: {countdown}s
                 </span>
               )}
             </div>
