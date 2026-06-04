@@ -102,6 +102,7 @@ function MainDashboard() {
   const [sliderPosition, setSliderPosition] = useState(50);
   const [compareMode, setCompareMode] = useState<"split" | "overlay">("split");
   const [overlayOpacity, setOverlayOpacity] = useState(50);
+  const [isExportingComparison, setIsExportingComparison] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<RoomAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
@@ -850,6 +851,163 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
     }
   };
 
+  const handleExportStackedComparison = async () => {
+    setIsExportingComparison(true);
+    setErrorBanner(null);
+
+    const beforeUrl = imageSrc || "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1200&q=80";
+    const afterUrl = customAfterUrl || (AFTER_IMAGES_MAPPING[roomType]?.[style] || "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80");
+
+    const loadImg = (url: string): Promise<HTMLImageElement> => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = url;
+        img.onload = () => resolve(img);
+        img.onerror = (err) => reject(err);
+      });
+    };
+
+    try {
+      // 1. Load both images in parallel
+      const [beforeImg, afterImg] = await Promise.all([
+        loadImg(beforeUrl),
+        loadImg(afterUrl),
+      ]);
+
+      // 2. Set up high definition canvas dims
+      const canvas = document.createElement("canvas");
+      const width = 1200;
+      const originalRatio = 9 / 16; // 16:9
+      const imgHeight = Math.round(width * originalRatio); // 675px
+
+      // Dims: Header title (110px) + TitleBefore (50px) + beforeImg (675px) + TitleAfter (50px) + afterImg (675px) + Footer details (60px) = 1620px
+      const headerHeight = 110;
+      const subtitleHeight = 50;
+      const footerHeight = 60;
+      const totalHeight = headerHeight + subtitleHeight * 2 + imgHeight * 2 + footerHeight;
+
+      canvas.width = width;
+      canvas.height = totalHeight;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Nepodarilo sa vytvoriť 2D kontext.");
+
+      // Fill pure elegant premium beige/white back
+      ctx.fillStyle = "#FAF9F6";
+      ctx.fillRect(0, 0, width, totalHeight);
+
+      // --- 1. MAIN HEADER ---
+      // Draw solid Swiss slate/charcoal header banner for pristine visual branding
+      ctx.fillStyle = "#1C1C1C";
+      ctx.fillRect(0, 0, width, headerHeight);
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 24px Helvetica, Arial, sans-serif";
+      ctx.fillText("SWISS ARCHITECTURAL RESPATIAL REDESIGN", 40, 50);
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+      ctx.font = "12px monospace";
+      ctx.fillText(`MIESTNOSŤ: ${roomType.toUpperCase()} | ARCHITEKTONICKÝ ŠTÝL: ${style.toUpperCase()}`, 40, 80);
+
+      ctx.fillStyle = "#D97706"; // Amber accent color
+      ctx.font = "bold 12px monospace";
+      ctx.fillText("AI ANALÝZA & DISPOZÍCIA SPATIAL BLUEPRINT v2.5", width - 360, 50);
+
+      // --- 2. BEFORE SECTION ---
+      let currentY = headerHeight;
+      
+      // Background row for label
+      ctx.fillStyle = "#FAF8F5";
+      ctx.fillRect(0, currentY, width, subtitleHeight);
+      
+      ctx.fillStyle = "#1C1C1C";
+      ctx.font = "bold 14px Helvetica, Arial, sans-serif";
+      ctx.fillText("PRED (PÔVODNÝ STAV MIESTNOSTI)", 40, currentY + 30);
+
+      ctx.fillStyle = "#8D8B84";
+      ctx.font = "11px monospace";
+      ctx.fillText("• Neusporiadaný alebo prázdny stavebný pôdorys", width - 380, currentY + 30);
+
+      // Draw thin elegant border line
+      ctx.strokeStyle = "rgba(28, 28, 28, 0.1)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, currentY + subtitleHeight);
+      ctx.lineTo(width, currentY + subtitleHeight);
+      ctx.stroke();
+
+      currentY += subtitleHeight;
+
+      // Draw the Before image
+      ctx.drawImage(beforeImg, 0, currentY, width, imgHeight);
+
+      currentY += imgHeight;
+
+      // --- 3. AFTER SECTION ---
+      // Background row for label
+      ctx.fillStyle = "#FAF8F5";
+      ctx.fillRect(0, currentY, width, subtitleHeight);
+
+      ctx.fillStyle = "#1C1C1C";
+      ctx.font = "bold 14px Helvetica, Arial, sans-serif";
+      ctx.fillText(`PO (SPATIAL REDIZAJN - ŠTÝL ${style.toUpperCase()})`, 40, currentY + 30);
+
+      ctx.fillStyle = "#10B981"; // Green success text
+      ctx.font = "bold 11px monospace";
+      ctx.fillText("✔ Fotorealistická optimalizácia & Swiss Minimalistický dizajn", width - 420, currentY + 30);
+
+      // Draw thin elegant border line
+      ctx.beginPath();
+      ctx.moveTo(0, currentY + subtitleHeight);
+      ctx.lineTo(width, currentY + subtitleHeight);
+      ctx.stroke();
+
+      currentY += subtitleHeight;
+
+      // Draw the After image
+      ctx.drawImage(afterImg, 0, currentY, width, imgHeight);
+
+      currentY += imgHeight;
+
+      // --- 4. FOOTER ---
+      ctx.fillStyle = "#F5F3ED";
+      ctx.fillRect(0, currentY, width, footerHeight);
+
+      // Fine elegant separator
+      ctx.beginPath();
+      ctx.moveTo(0, currentY);
+      ctx.lineTo(width, currentY);
+      ctx.stroke();
+
+      ctx.fillStyle = "#55524B";
+      ctx.font = "11px monospace";
+      ctx.fillText("Navrhnuté automatizovaným CAD-AI systémom | Všetky Práva Vyhradené", 40, currentY + 35);
+
+      const timestamp = new Date().toLocaleString("sk-SK");
+      ctx.fillText(`Dátum vyhotovenia: ${timestamp}`, width - 280, currentY + 35);
+
+      // --- 5. TRIGGER BROWSER DOWNLOAD ---
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+      const link = document.createElement("a");
+      link.download = `swiss-redizajn-porovnanie-pred-po.jpg`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Update stats and metrics
+      StorageService.updateMetrics(m => m.firebaseStorageRequests += 1);
+      syncMetrics();
+
+    } catch (err) {
+      console.error("Chyba exportu porovnania obrázkov", err);
+      setErrorBanner("Obrázky sa nepodarilo spojiť a uložiť. Dôvodom môžu byť CORS obmedzenia vášho prehliadača. Skúste si obrázky stiahnuť samostatne.");
+    } finally {
+      setIsExportingComparison(false);
+    }
+  };
+
   const handleResetMetrics = () => {
     StorageService.resetMetrics();
     syncMetrics();
@@ -1449,10 +1607,21 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                         </p>
                       </div>
 
-                      {/* Info card of current setup */}
-                      <div className="bg-[#FAF8F5] border border-[#1C1C1C]/10 px-3 py-2 text-[11px] font-mono shrink-0">
-                        <span className="text-gray-400 uppercase block text-[9px]">Zvolená Dispozícia</span>
-                        <span className="text-black font-semibold">{roomType} • {style}</span>
+                      {/* Info card of current setup with action button to save stacked before/after images */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                        <div className="bg-[#FAF8F5] border border-[#1C1C1C]/10 px-3 py-2 text-[11px] font-mono">
+                          <span className="text-gray-400 uppercase block text-[9px]">Zvolená Dispozícia</span>
+                          <span className="text-black font-semibold">{roomType} • {style}</span>
+                        </div>
+                        <button
+                          onClick={handleExportStackedComparison}
+                          disabled={isExportingComparison}
+                          className="flex items-center justify-center space-x-2 bg-[#1C1C1C] hover:bg-black text-[#FAF9F6] hover:text-white px-4 py-2.5 text-xs font-mono uppercase tracking-wider transition-all select-none cursor-pointer border border-[#1C1C1C] disabled:opacity-50 active:scale-95 text-center leading-none"
+                          title="Uložiť a stiahnuť porovnanie obrázkov pod sebou pre lepšiu prehľadnosť"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>{isExportingComparison ? "Export..." : "Uložiť Pred & Po (Pod Sebou)"}</span>
+                        </button>
                       </div>
                     </div>
 
