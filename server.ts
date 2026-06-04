@@ -5,7 +5,6 @@
 
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
@@ -530,6 +529,7 @@ Priprav kompletný návrh pozostávajúci zo slovenského zhodnotenia pôvodnéh
 // 3. Vite Server or Production static routes
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
