@@ -252,18 +252,58 @@ function getPremiumMockResponse(roomType: string, style: string, budget: number)
 }
 
 // 2. Redesign POST api
+async function tryGenerateMistralImage(style: string, roomType: string, summary: string, materials: string[], key: string): Promise<string | null> {
+  if (!key || key === "MY_MISTRAL_API_KEY") return null;
+  try {
+    console.log("Automatically generating photorealistic design using Mistral flux-pro-latest...");
+    const matsText = materials && materials.length > 0 ? materials.join(", ") : "premium natural materials";
+    const prompt = `A highly realistic, photorealistic, premium interior architecture digest photo of a newly redesigned ${roomType.toLowerCase()} in a stunning ${style} style. Description: ${summary || ""}. Materials to use: ${matsText}. Strict layout preservation, exact wall placement matching the room, elegant natural direct afternoon lighting, professional 35mm photograph, architectural digest feature look, 8k resolution, ultra realism.`;
+    
+    const response = await fetch("https://api.mistral.ai/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model: "flux-pro-latest",
+        prompt: prompt,
+        n: 1,
+        size: "1024x1024",
+        response_format: "url"
+      })
+    });
+
+    if (response.ok) {
+      const resJson: any = await response.json();
+      const url = resJson.data?.[0]?.url;
+      if (url) {
+        console.log("Successfully generated automatic image over Mistral API:", url);
+        return url;
+      }
+    } else {
+      console.warn("Mistral image generation failed:", await response.text());
+    }
+  } catch (err) {
+    console.error("Error generating Mistral image:", err);
+  }
+  return null;
+}
+
 app.post("/api/redesign", async (req, res) => {
-  const { image, roomType, style, budget } = req.body;
+  const { image, roomType, style, budget, provider } = req.body;
 
   if (!roomType || !style) {
     return res.status(400).json({ error: "Chýbajúce parametre: roomType, style." });
   }
 
   const ai = getGeminiClient();
+  const mistralKey = process.env.MISTRAL_API_KEY;
+  const useMistral = (provider === "mistral" || (!ai && typeof mistralKey === "string" && mistralKey.trim() !== "" && mistralKey !== "MY_MISTRAL_API_KEY"));
 
   // If client is null (no API key configured), fall back to beautiful premium mockup simulation
-  if (!ai) {
-    console.log("No GEMINI_API_KEY detected or using placeholder. Serving high-fidelity simulated response.");
+  if (!ai && !useMistral) {
+    console.log("No GEMINI_API_KEY or MISTRAL_API_KEY detected. Serving high-fidelity simulated response.");
     const mockData = getPremiumMockResponse(roomType, style, budget);
     return res.json({
       success: true,
@@ -274,7 +314,7 @@ app.post("/api/redesign", async (req, res) => {
         geminiTokensOutput: 345,
         estimatedCostEur: 0.00015 // Tiny cost metrics representation
       },
-      message: "Formátované v režime Simulácie, keďže chýba kľúč GEMINI_API_KEY."
+      message: "Formátované v režime Simulácie, keďže chýbajú kľúče pre AI modely."
     });
   }
 
@@ -286,47 +326,54 @@ app.post("/api/redesign", async (req, res) => {
     }
 
     const systemPrompt = `Si špičkový interiérový architekt vyznávajúci švajčiarsky minimalizmus, funkčnosť, precízne meranie a prácu s negatívnym priestorom.
-Analyzuj pošlaný priestor (${roomType}) a premysli si, ako ho redizajnovať do štýlu: ${style} s celkovým rozpočtom do ${budget} EUR.
-Priprav kompletný návrh pozostávajúci zo slovenského zhodnotenia, zoznamu materiálov, odporúčaní pre svetlo a presného 2D rozloženia nábytku vo forme relatívnych percentuálnych súradníc (Súradnice X idú zľava doprava 0-100%, Y zhora nadol 0-100%).
-Odpovedz výhradne v slovenskom jazyku a striktne prispôsob hodnoty kusu nábytku odhadovanému rozpočtu (zrátané položky nesmú prekročiť ${budget} EUR).`;
+Analyzuj pošlaný priestor (${roomType}) z fotografie. Dôkladne zhodnoť usporiadanie stien, okien, dverí a celkové dispozičné rozmery miestnosti (dĺžku, šírku a výšku).
+Tvojou úlohou je navrhnúť kompletný interiérový redizajn v štýle: ${style} s prísnym obmedzením celkového rozpočtu do ${budget} EUR.
+
+Musíš dbať na nasledujúce konštrukčné a rozmerové pravidlá:
+1. MAXIMÁLNA PODOBNOSŤ: Nový návrh musí rešpektovať pôvodné rozmery, dĺžku a šírku miestnosti. Nepridávaj priečky ani nezasahuj do nosných konštrukcií zobrazených na fotke.
+2. PRESNOSŤ SÚRADNÍC: 2D pôdorys nábytku ("furnitureLayout") musí reprezentovať reálne rozmiestnenie. Súradnica coordinateX (0 až 100% zľava doprava) a coordinateY (0 až 100% zhora nadol) musia presne odrážať pozíciu voči stenám a oknám zachyteným na fotografii.
+3. REÁLNE ROZMERY: Každý kus nábytku musí mať zmysluplnú šírku a hĺbku v centimetroch (napr. štandardná sedačka šírka 200-240cm, hĺbka 90-100cm).
+4. ROZPOČTOVÁ INTEGRITA: Súčet cien "estimatedPrice" všetkých položiek nesmie prekročiť limit ${budget} EUR. Odporúčaj reálne obchody v SR dostupné pre daný rozpočet.
+
+Priprav kompletný návrh pozostávajúci zo slovenského zhodnotenia pôvodného stavu vs nového návrhu, zoznamu prémiových materiálov, odporúčaní pre rozloženie osvetlenia a presného 2D rozloženia nábytku vo forme relatívnych percentuálnych súradníc. Odpovedz výhradne vo validnom JSON formáte nachádzajúcom sa pod touto inštrukciou.`;
 
     const responseSchema = {
-      type: Type.OBJECT,
+      type: "object",
       properties: {
-        roomType: { type: Type.STRING },
-        aestheticStyle: { type: Type.STRING },
+        roomType: { type: "string" },
+        aestheticStyle: { type: "string" },
         summary: {
-          type: Type.STRING,
+          type: "string",
           description: "Odborná analýza súčasného priestoru po slovensky s konkrétnymi dizajnovými vylepšeniami v duchu švajčiarskeho minimalizmu."
         },
         colorPalette: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
+          type: "array",
+          items: { type: "string" },
           description: "Zoznam 4 až 5 harmonických HEX kódov pre steny a hlavný nábytok."
         },
         materials: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
+          type: "array",
+          items: { type: "string" },
           description: "Odporúčané udržateľné a vysoko kvalitné materiály (napr. bielená borovica, kompozitný kremeň)."
         },
         lightingTips: {
-          type: Type.STRING,
+          type: "string",
           description: "Tipy pre inteligentné rozvrstvenie nepriameho a priameho osvetlenia (v slovenčine)."
         },
         furnitureLayout: {
-          type: Type.ARRAY,
+          type: "array",
           items: {
-            type: Type.OBJECT,
+            type: "object",
             properties: {
-              name: { type: Type.STRING, description: "Názov kusu nábytku v slovenskom jazyku." },
-              category: { type: Type.STRING, description: "Kategória predmetu (sedačka, stôl, polica, svietidlo apod.)." },
-              coordinateX: { type: Type.INTEGER, description: "Relatívna šírková súradnica na 2D pôdoryse (0 až 100)." },
-              coordinateY: { type: Type.INTEGER, description: "Relatívna hĺbková súradnica na 2D pôdoryse (0 až 100)." },
-              width: { type: Type.INTEGER, description: "Šírka v centimetroch." },
-              depth: { type: Type.INTEGER, description: "Hĺbka v centimetroch." },
-              estimatedPrice: { type: Type.INTEGER, description: "Odhadovaná cena v EUR." },
-              storeRecommendation: { type: Type.STRING, description: "Konkrétny reálny obchod (napr. IKEA, Jysk, Sconto)." },
-              description: { type: Type.STRING, description: "Prečo a ako tento nábytok v priestore využiť (slovensky)." }
+              name: { type: "string", description: "Názov kusu nábytku v slovenskom jazyku." },
+              category: { type: "string", description: "Kategória predmetu (sedačka, stôl, polica, svietidlo apod.)." },
+              coordinateX: { type: "integer", description: "Relatívna šírková súradnica na 2D pôdoryse (0 až 100)." },
+              coordinateY: { type: "integer", description: "Relatívna hĺbková súradnica na 2D pôdoryse (0 až 100)." },
+              width: { type: "integer", description: "Šírka v centimetroch." },
+              depth: { type: "integer", description: "Hĺbka v centimetroch." },
+              estimatedPrice: { type: "integer", description: "Odhadovaná cena v EUR." },
+              storeRecommendation: { type: "string", description: "Konkrétny reálny obchod (napr. IKEA, Jysk, Sconto)." },
+              description: { type: "string", description: "Prečo a ako tento nábytok v priestore využiť (slovensky)." }
             },
             required: ["name", "category", "coordinateX", "coordinateY", "width", "depth", "estimatedPrice", "storeRecommendation", "description"]
           }
@@ -334,6 +381,86 @@ Odpovedz výhradne v slovenskom jazyku a striktne prispôsob hodnoty kusu nábyt
       },
       required: ["roomType", "aestheticStyle", "summary", "colorPalette", "materials", "lightingTips", "furnitureLayout"]
     };
+
+    if (useMistral) {
+      console.log("Executing redesign query using Mistral AI API...");
+      const modelName = base64Data ? "pixtral-12b-2409" : "mistral-large-latest";
+      
+      const userContent: any[] = [
+        {
+          type: "text",
+          text: `Analyzuj izbu typu ${roomType} a vygeneruj pre ňu moderný ${style} redizajn s rozpočtom ${budget} EUR. Odpovedaj striktne v slovenskom jazyku a vráť formátovaný JSON podľa schémy.`
+        }
+      ];
+
+      if (base64Data) {
+        userContent.push({
+          type: "image_url",
+          image_url: {
+            url: `data:image/jpeg;base64,${base64Data}`
+          }
+        });
+      }
+
+      const mResponse = await fetch("https://api.mistral.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${mistralKey}`
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages: [
+            {
+              role: "system",
+              content: `${systemPrompt}\n\nMusíš odpovedať výhradne vo validnom JSON formáte, ktorý striktne vyhovuje tomuto JSON-Schema opisu:\n${JSON.stringify(responseSchema, null, 2)}`
+            },
+            {
+              role: "user",
+              content: userContent
+            }
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.2
+        })
+      });
+
+      if (!mResponse.ok) {
+        const errorText = await mResponse.text();
+        throw new Error(`Mistral API error (${mResponse.status}): ${errorText}`);
+      }
+
+      const mJson: any = await mResponse.json();
+      const textOutput = mJson.choices?.[0]?.message?.content;
+      if (!textOutput) {
+        throw new Error("Mistral API nevrátilo žiadny textový výstup.");
+      }
+
+      const parsedJson = JSON.parse(textOutput.trim());
+      
+      // Automatically attempt image generation if Mistral key is configured
+      const generatedImageUrl = await tryGenerateMistralImage(style, roomType, parsedJson.summary, parsedJson.materials, mistralKey || "");
+
+      const promptLen = systemPrompt.length + (base64Data ? base64Data.length : 0);
+      const respLen = textOutput.length;
+      const inputTokens = Math.floor(promptLen / 4) + 150;
+      const outputTokens = Math.floor(respLen / 4);
+
+      return res.json({
+        success: true,
+        data: parsedJson,
+        isSimulated: false,
+        generatedImageUrl: generatedImageUrl,
+        simulationMetrics: {
+          geminiTokensInput: inputTokens,
+          geminiTokensOutput: outputTokens,
+          estimatedCostEur: (inputTokens * 0.00000015) + (outputTokens * 0.0000006)
+        },
+        provider: "mistral"
+      });
+    }
+
+    // Default to Gemini API if useMistral is false
 
     // Prepare inputs for Gemini
     const contentParts: any[] = [];
@@ -367,6 +494,9 @@ Odpovedz výhradne v slovenskom jazyku a striktne prispôsob hodnoty kusu nábyt
 
     const parsedJson = JSON.parse(textOutput.trim());
     
+    // Automatically attempt image generation if Mistral key is configured for a realistic 3D mockup visual
+    const generatedImageUrl = await tryGenerateMistralImage(style, roomType, parsedJson.summary, parsedJson.materials, mistralKey || "");
+    
     // Calculate approximate tokens for our statistics tracker (1 character ~ 4 characters per token estimate)
     const promptLen = systemPrompt.length + (base64Data ? base64Data.length : 0);
     const respLen = textOutput.length;
@@ -377,6 +507,7 @@ Odpovedz výhradne v slovenskom jazyku a striktne prispôsob hodnoty kusu nábyt
       success: true,
       data: parsedJson,
       isSimulated: false,
+      generatedImageUrl: generatedImageUrl,
       simulationMetrics: {
         geminiTokensInput: inputTokens,
         geminiTokensOutput: outputTokens,

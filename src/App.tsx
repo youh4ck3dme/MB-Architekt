@@ -22,7 +22,11 @@ import {
   History,
   Trash2,
   FileText,
-  Download
+  Download,
+  Eye,
+  Image as ImageIcon,
+  Copy,
+  Check
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -49,6 +53,24 @@ export default function App() {
   );
 }
 
+const AFTER_IMAGES_MAPPING: Record<string, Record<string, string>> = {
+  "Obývacia izba": {
+    "Swiss-Minimalist": "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80",
+    "Japandi": "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1200&q=80",
+    "Nordic": "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=1200&q=80"
+  },
+  "Spálňa": {
+    "Swiss-Minimalist": "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80",
+    "Japandi": "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&w=1200&q=80",
+    "Nordic": "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80"
+  },
+  "Kuchyňa": {
+    "Swiss-Minimalist": "https://images.unsplash.com/photo-1556912173-3bb406ef7e77?auto=format&fit=crop&w=1200&q=80",
+    "Japandi": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
+    "Nordic": "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1200&q=80"
+  }
+};
+
 function MainDashboard() {
   // Authentication states
   const [user, setUser] = useState<{ uid: string; displayName: string; email: string; isAnonymous: boolean } | null>(null);
@@ -59,12 +81,16 @@ function MainDashboard() {
   const [roomType, setRoomType] = useState("Obývacia izba");
   const [style, setStyle] = useState("Swiss-Minimalist");
   const [budget, setBudget] = useState(2500);
+  const [provider, setProvider] = useState<"gemini" | "mistral">("gemini");
   const [uploadProgress, setUploadProgress] = useState<{ originalSize: string; compressedSize: string; savedPercent: number } | null>(null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   
   // UI views & outputs
-  const [activeTab, setActiveTab] = useState<"analysis" | "blueprint" | "shopping">("blueprint");
+  const [activeTab, setActiveTab] = useState<"analysis" | "blueprint" | "shopping" | "visual-compare">("visual-compare");
+  const [customAfterUrl, setCustomAfterUrl] = useState<string | null>(null);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
+  const [sliderPosition, setSliderPosition] = useState(50);
   const [analysisResult, setAnalysisResult] = useState<RoomAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
@@ -82,6 +108,26 @@ function MainDashboard() {
 
   // Input file reference
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Dynamic Prompt generator for external image generator testing matching dimensions
+  const generateImgPrompt = () => {
+    const sDesc = style === "Swiss-Minimalist" 
+      ? "Swiss-Minimalist architecture, clean strict grid alignment, extreme physical discipline, tactile concrete wall panels paired with light bleached oak wood cabinets, pure focus on empty intervals (negative space), and high-end built-in ambient lighting"
+      : style === "Japandi"
+      ? "warm Japandi interior style, organic curves combined with strict Scandinavian functionalism, soft clay plaster walls, low solid timber platform furniture, tactile cream linen fabrics, delicate hanging washi paper rice lanterns"
+      : "cozy Scandinavian Nordic feel, whitewashed rustic wood flooring, bright airy northern daylight, pale light pine accents, cozy brushed wool throws, and simple matte black architectural hardware";
+      
+    const mats = analysisResult?.materials ? analysisResult.materials.join(", ") : "premium natural resources, sustainable materials";
+    const colors = analysisResult?.colorPalette ? analysisResult.colorPalette.join(", ") : "well-balanced monochromatic palette";
+    
+    return `Interior architectural photorealistic design of this exact ${roomType.toLowerCase()}. 
+SPATIAL FIDELITY ENFORCEMENT: Retain 100% of the original spatial geometry, including the exact ceiling borders, structural walls, window placement, door frames, and camera field of view from the reference picture. Absolutely no structural changes.
+DESIGN DIRECTIVE: Redesign and furnish the room using ${sDesc}.
+MATERIALITY: Apply high-quality realistic materials like: ${mats}.
+COLOR SCHEME: Apply this exact color palette: ${colors}.
+LAYOUT: Cleanly furnish the space with: ${analysisResult?.furnitureLayout ? analysisResult.furnitureLayout.map(f => `${f.name} in category ${f.category}`).join(", ") : "minimal clean pieces"}.
+RENDERING DETAILS: High-end architectural digest publication photo, realism, soft diffused warm light (2700K), captured on professional 35mm lens, atmospheric depth, realistic soft shadows, 8k resolution, photoreal --ar 16:9 --v 6.0`;
+  };
 
   // Initialize and check persistent auth
   useEffect(() => {
@@ -361,6 +407,7 @@ function MainDashboard() {
           roomType: roomType,
           style: style,
           budget: budget,
+          provider: provider,
         }),
       });
 
@@ -380,6 +427,14 @@ function MainDashboard() {
       if (resJson.success) {
         const result: RoomAnalysisResult = resJson.data;
         setAnalysisResult(result);
+        
+        if (resJson.generatedImageUrl) {
+          setCustomAfterUrl(resJson.generatedImageUrl);
+        } else {
+          setCustomAfterUrl(null);
+        }
+        
+        setActiveTab("visual-compare");
 
         // Complete spark credit simulated reductions
         const updatedCredits = Math.max(0, (profile?.credits || 100) - 1);
@@ -696,6 +751,56 @@ function MainDashboard() {
       ctx.fillText(color.toUpperCase(), px, palY + 30);
     });
 
+    // 8.5 Draw beautiful modern Materials Specification Box above the color palette on the right side
+    const matW = 220;
+    const matH = 135;
+    const matX = size - margin - matW;
+    const matY = palY - 30 - matH;
+
+    // Draw background block
+    ctx.fillStyle = "#FFFFFF";
+    ctx.strokeStyle = "#1C1C1C";
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(matX, matY, matW, matH);
+    ctx.strokeRect(matX, matY, matW, matH);
+
+    // Title line & text
+    ctx.strokeStyle = "rgba(28, 28, 28, 0.2)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(matX, matY + 30);
+    ctx.lineTo(matX + matW, matY + 30);
+    ctx.stroke();
+
+    ctx.fillStyle = "#1C1C1C";
+    ctx.font = "bold 9px courier, monospace";
+    ctx.textAlign = "left";
+    ctx.fillText("MATERIÁLOVÁ ŠPECIFIKÁCIA", matX + 10, matY + 18);
+
+    // List of materials
+    const materialsList = analysisResult.materials || [];
+    if (materialsList.length === 0) {
+      ctx.fillStyle = "#8D8B84";
+      ctx.font = "italic 9px Helvetica, Arial, sans-serif";
+      ctx.fillText("Dubové drevo, brúsená oceľ", matX + 10, matY + 50);
+      ctx.fillText("Prírodný kameň, matné sklo", matX + 10, matY + 68);
+    } else {
+      materialsList.slice(0, 5).forEach((material, idx) => {
+        const itemY = matY + 48 + idx * 16;
+        
+        // Draw tiny custom bullet square
+        ctx.fillStyle = "#121212";
+        ctx.fillRect(matX + 10, itemY - 6, 4, 4);
+
+        // Draw material text
+        ctx.fillStyle = "rgba(28, 28, 28, 0.85)";
+        ctx.font = "9px Helvetica, Arial, sans-serif";
+        // Truncate material name if it's too long
+        const truncatedMaterial = material.length > 32 ? material.substring(0, 30) + "..." : material;
+        ctx.fillText(truncatedMaterial, matX + 20, itemY - 2);
+      });
+    }
+
     // 9. Fire save browser flow!
     try {
       const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
@@ -799,8 +904,8 @@ function MainDashboard() {
 
             <div className="flex items-center space-x-1.5 bg-[#1C1C1C]/5 px-2.5 py-1.5 rounded-none border border-[#1C1C1C]/10 text-[11px] md:text-xs">
               <Cpu className="w-3.5 h-3.5 text-gray-600 shrink-0" />
-              <span className="font-mono text-gray-500">
-                AI: gemini-2.5-flash
+              <span className="font-mono text-gray-500 uppercase">
+                AI: {provider === "gemini" ? "gemini-2.5-flash" : "mistral-pixtral"}
               </span>
             </div>
 
@@ -923,6 +1028,40 @@ function MainDashboard() {
                 <p className="text-xs text-gray-500">Zadajte parametre priestoru a nahrajte pôvodné foto.</p>
               </div>
               <Sparkles className="w-5 h-5 text-gray-400" />
+            </div>
+
+            {/* AI Model Provider Selector */}
+            <div className="space-y-2 bg-[#FAF9F6] p-3 border border-[#1C1C1C]/5">
+              <label className="block text-xs font-mono tracking-wider uppercase text-gray-500">
+                AI Poskytovateľ (Model)
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setProvider("gemini")}
+                  className={`py-2 px-1 text-xs font-mono uppercase border transition-all text-center cursor-pointer ${
+                    provider === "gemini" 
+                      ? "bg-[#1C1C1C] text-[#FAF9F6] border-[#1C1C1C]" 
+                      : "bg-white text-gray-700 border-gray-200 hover:bg-[#1C1C1C]/5"
+                  }`}
+                >
+                  Gemini API
+                </button>
+                <button
+                  onClick={() => setProvider("mistral")}
+                  className={`py-2 px-1 text-xs font-mono uppercase border transition-all text-center cursor-pointer ${
+                    provider === "mistral" 
+                      ? "bg-[#1C1C1C] text-[#FAF9F6] border-[#1C1C1C]" 
+                      : "bg-white text-gray-700 border-gray-200 hover:bg-[#1C1C1C]/5"
+                  }`}
+                >
+                  Mistral AI
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-400 italic">
+                {provider === "gemini" 
+                  ? "Používa Gemini 1.5/2.5 Flash na bleskovú multimodálnu analýzu." 
+                  : "Používa Mistral API (Pixtral-12B pre obrázky, Mistral Large pre štruktúrovaný text)."}
+              </p>
             </div>
 
             {/* 1. Select Room Type */}
@@ -1146,6 +1285,18 @@ function MainDashboard() {
               {/* TABS NAVBAR */}
               <div className="bg-white border-b border-[#1C1C1C]/10 flex select-none shrink-0 overflow-x-auto">
                 <button
+                  onClick={() => setActiveTab("visual-compare")}
+                  className={`flex-1 py-4 px-3 text-xs font-mono uppercase tracking-wider border-b-2 transition-all flex items-center justify-center space-x-2 cursor-pointer whitespace-nowrap ${
+                    activeTab === "visual-compare" 
+                      ? "border-[#1C1C1C] text-black bg-white font-semibold" 
+                      : "border-transparent text-gray-400 hover:text-gray-600 bg-gray-50 hover:bg-gray-100/50"
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Pred & Po Vizuál</span>
+                </button>
+
+                <button
                   onClick={() => setActiveTab("blueprint")}
                   className={`flex-1 py-4 px-3 text-xs font-mono uppercase tracking-wider border-b-2 transition-all flex items-center justify-center space-x-2 cursor-pointer whitespace-nowrap ${
                     activeTab === "blueprint" 
@@ -1184,6 +1335,168 @@ function MainDashboard() {
 
               {/* ACTIVE VIEWPORT PORTAL */}
               <div className="flex-1 overflow-y-auto p-4 md:p-8 min-h-[400px]">
+                
+                {/* 0. BEFORE & AFTER VISUAL COMPARISON TAB */}
+                {activeTab === "visual-compare" && (
+                  <div className="space-y-8 animate-fade-in text-gray-900">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+                      <div>
+                        <h4 className="font-display font-semibold text-lg text-gray-900 leading-tight">
+                          Odhadovaný Výsledný Po Vizuál (Pred & Po)
+                        </h4>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Vyvážené interaktívne usporiadanie nábytku v štýle <span className="font-mono text-black font-semibold uppercase">{style}</span> rešpektujúce pôvodné dispozičné rozmery miestnosti.
+                        </p>
+                      </div>
+
+                      {/* Info card of current setup */}
+                      <div className="bg-[#FAF8F5] border border-[#1C1C1C]/10 px-3 py-2 text-[11px] font-mono shrink-0">
+                        <span className="text-gray-400 uppercase block text-[9px]">Zvolená Dispozícia</span>
+                        <span className="text-black font-semibold">{roomType} • {style}</span>
+                      </div>
+                    </div>
+
+                    {/* INTERACTIVE COMPARISON BLOCK */}
+                    <div className="space-y-4">
+                      <span className="text-xs font-mono tracking-wider text-gray-400 uppercase block font-bold">
+                        Potiahnite posuvník pre vizuálne porovnanie
+                      </span>
+
+                      <div className="relative aspect-video w-full max-w-4xl mx-auto overflow-hidden border border-[#1C1C1C]/10 shadow-md bg-gray-100 select-none">
+                        
+                        {/* RIGHT IMAGE (AFTER): Gorgeous Redesigned rendering */}
+                        <img 
+                          src={customAfterUrl || (AFTER_IMAGES_MAPPING[roomType]?.[style] || "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80")} 
+                          alt="Po redizajne" 
+                          className="absolute inset-0 w-full h-full object-cover" 
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute top-4 right-4 bg-[#1C1C1C]/80 backdrop-blur-xs px-2.5 py-1 text-[10px] text-white font-mono uppercase tracking-wider select-none z-10 border border-white/20">
+                          {customAfterUrl ? "Po (Vlastný AI Vizuál)" : "Po (Architektonický Návrh)"}
+                        </div>
+
+                        {/* LEFT IMAGE (BEFORE): Original design (with a clip-path revealing based on slider position) */}
+                        <div 
+                          className="absolute inset-y-0 left-0 overflow-hidden z-25"
+                          style={{ width: `${sliderPosition}%` }}
+                        >
+                          <img 
+                            src={imageSrc || "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1200&q=80"} 
+                            alt="Pred úpravou" 
+                            className="absolute inset-0 w-full h-full object-cover" 
+                            style={{ width: "100%", maxWidth: "none" }}
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                        <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-xs px-2.5 py-1 text-[10px] text-[#1C1C1C] font-mono uppercase tracking-wider select-none z-10 border border-black/10">
+                          Pred (Pôvodný Stav)
+                        </div>
+
+                        {/* SLIDER CONTROLLER SPLIT BAR */}
+                        <div 
+                          className="absolute inset-y-0 w-1 bg-white cursor-ew-resize z-30 shadow-[0_0_10px_rgba(0,0,0,0.5)]"
+                          style={{ left: `${sliderPosition}%` }}
+                        >
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white text-black shadow-lg flex items-center justify-center font-bold text-xs select-none">
+                            ↔
+                          </div>
+                        </div>
+
+                        {/* HIDDEN INVISIBLE RANGE INPUT OVERLAY FOR ULTRA SMOOTH INTERACTION */}
+                        <input 
+                          type="range" 
+                          min="0" 
+                          max="100" 
+                          value={sliderPosition} 
+                          onChange={(e) => setSliderPosition(Number(e.target.value))}
+                          className="absolute inset-0 opacity-0 w-full h-full cursor-ew-resize z-40"
+                        />
+                      </div>
+
+                      {/* SLIDER ASSISTANCE */}
+                      <div className="flex justify-between text-[11px] font-mono text-gray-400 px-1">
+                        <span>← Pôvodný poškodený/prázdny stav</span>
+                        <span className="animate-pulse text-gray-500 font-semibold">Tiahnite myšou/kliknite na plochu pre rez</span>
+                        <span>Nový Swiss Minimalistický vizuál →</span>
+                      </div>
+                    </div>
+
+                    {/* PROMPT GENERATION TOOL FOR MISTRAL / MIDJOURNEY GENERATORS */}
+                    <div className="bg-[#FAF8F5] border border-[#1C1C1C]/10 p-6 space-y-6">
+                      <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                        <div className="space-y-1">
+                          <h5 className="font-display font-semibold text-sm text-gray-900 uppercase tracking-wide flex items-center space-x-2">
+                            <Sparkles className="w-4 h-4 text-black shrink-0" />
+                            <span>1. Systémový Prompt pre AI Obrázkové Modelovanie</span>
+                          </h5>
+                          <p className="text-xs text-gray-500 max-w-2xl leading-relaxed">
+                            Skopírujte si tento precízne vygenerovaný prompt a zadajte ho do vášho AI obrázkového generátora (napr. Mistral, Midjourney v6, Stable Diffusion XL alebo DALL-E 3). Tento prompt garantuje zachovanie presných rozmerov miestnosti, dĺžky a šírky stien.
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(generateImgPrompt());
+                            setCopiedPrompt(true);
+                            setTimeout(() => setCopiedPrompt(false), 2000);
+                          }}
+                          className={`py-2 px-4 text-xs font-mono uppercase tracking-wider shrink-0 transition-all cursor-pointer flex items-center space-x-2 border border-[#1C1C1C] ${
+                            copiedPrompt 
+                              ? "bg-green-600 text-white border-green-600 font-bold" 
+                              : "bg-[#1C1C1C] text-[#FAF9F6] border-[#1C1C1C] hover:bg-black font-semibold"
+                          }`}
+                        >
+                          {copiedPrompt ? (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Skopírované!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Kopírovať Prompt</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* VIEW OF THE PROMPT */}
+                      <div className="bg-white border border-[#1C1C1C]/10 p-4 font-mono text-xs text-gray-700 whitespace-pre-wrap select-all leading-relaxed relative max-h-[160px] overflow-y-auto">
+                        {generateImgPrompt()}
+                      </div>
+
+                      {/* OVERRIDE WITH REAL PHOTO GENERATOR */}
+                      <div className="pt-2 border-t border-[#1C1C1C]/5 space-y-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-mono tracking-wider text-gray-500 uppercase block font-bold">
+                            2. Testovanie s Vaším vygenerovaným real photo návrhom
+                          </label>
+                          <p className="text-[11px] text-gray-400">
+                            Vložte URL alebo odkaz na vašu vygenerovanú fotografiu (napr. z Discordu, Imgbb, Pinterestu) a okamžite ju prepojte so schémou priestoru.
+                          </p>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            placeholder="https://odkaz-na-obrazok.jpg" 
+                            value={customAfterUrl || ""}
+                            onChange={(e) => setCustomAfterUrl(e.target.value || null)}
+                            className="flex-1 bg-white border border-[#1C1C1C]/10 py-2 px-3 text-xs font-mono focus:outline-none focus:border-[#1C1C1C] rounded-none text-gray-800"
+                          />
+                          {customAfterUrl && (
+                            <button 
+                              onClick={() => setCustomAfterUrl(null)}
+                              className="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 text-xs font-mono border border-red-200 uppercase transition-all whitespace-nowrap shrink-0 cursor-pointer"
+                            >
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 {/* 1. ARCHITECTURAL BLUEPRINT 2D SCHEMATIC CANVAS */}
                 {activeTab === "blueprint" && (
