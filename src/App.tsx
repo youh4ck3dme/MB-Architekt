@@ -135,13 +135,13 @@ function MainDashboard() {
     const mats = analysisResult?.materials ? analysisResult.materials.join(", ") : "premium natural resources, sustainable materials";
     const colors = analysisResult?.colorPalette ? analysisResult.colorPalette.join(", ") : "well-balanced monochromatic palette";
     
-    return `Interior architectural photorealistic design of this exact ${roomType.toLowerCase()}. 
+    return `Highly realistic, photorealistic interior architectural design of the inside of this exact ${roomType.toLowerCase()}. 
 SPATIAL FIDELITY ENFORCEMENT: Retain 100% of the original spatial geometry, including the exact ceiling borders, structural walls, window placement, door frames, and camera field of view from the reference picture. Absolutely no structural changes.
 DESIGN DIRECTIVE: Redesign and furnish the room using ${sDesc}.
 MATERIALITY: Apply high-quality realistic materials like: ${mats}.
 COLOR SCHEME: Apply this exact color palette: ${colors}.
 LAYOUT: Cleanly furnish the space with: ${analysisResult?.furnitureLayout ? analysisResult.furnitureLayout.map(f => `${f.name} in category ${f.category}`).join(", ") : "minimal clean pieces"}.
-RENDERING DETAILS: High-end architectural digest publication photo, realism, soft diffused warm light (2700K), captured on professional 35mm lens, atmospheric depth, realistic soft shadows, 8k resolution, photoreal --ar 16:9 --v 6.0`;
+RENDERING DETAILS: High-end architectural digest publication photo, realism, soft diffused warm light (2700K), captured on professional 35mm lens, atmospheric depth, realistic soft shadows, 8k resolution, photoreal. STRICTLY INDOOR SHOT, NO OUTDOOR SCENERY, NO EXTERIOR VIEW, PURE INTERNAL PHOTOGRAPH.`;
   };
 
   // Initialize and check persistent auth

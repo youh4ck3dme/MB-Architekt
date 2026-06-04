@@ -254,9 +254,9 @@ function getPremiumMockResponse(roomType: string, style: string, budget: number)
 async function tryGenerateMistralImage(style: string, roomType: string, summary: string, materials: string[], key: string): Promise<string | null> {
   if (!key || key.trim() === "" || key === "MY_MISTRAL_API_KEY") return null;
   try {
-    console.log("Automatically generating photorealistic design using Mistral flux-pro-latest...");
+    console.log("Automatically generating photorealistic design using Mistral flux-pro...");
     const matsText = materials && materials.length > 0 ? materials.join(", ") : "premium natural materials";
-    const prompt = `A highly realistic, photorealistic, premium interior architecture digest photo of a newly redesigned ${roomType.toLowerCase()} in a stunning ${style} style. Description: ${summary || ""}. Materials to use: ${matsText}. Strict layout preservation, exact wall placement matching the room, elegant natural direct afternoon lighting, professional 35mm photograph, architectural digest feature look, 8k resolution, ultra realism.`;
+    const prompt = `A highly realistic, photorealistic, premium interior architecture digest photo taken from inside the room of a newly redesigned ${roomType.toLowerCase()} in a stunning ${style} style. Description: ${summary || ""}. Materials to use: ${matsText}. Strict layout preservation, exact wall placement matching the room, elegant natural direct afternoon lighting, professional 35mm photograph, architectural digest feature look, 8k resolution, ultra realism. STRICTLY INDOOR SHOT, NO EXTERIOR PERSPECTIVE, NO GARDENS, NO EXTERIOR BUILDINGS, DEFINITELY INTERNAL VIEW.`;
     
     const response = await fetch("https://api.mistral.ai/v1/images/generations", {
       method: "POST",
@@ -265,7 +265,7 @@ async function tryGenerateMistralImage(style: string, roomType: string, summary:
         "Authorization": `Bearer ${key}`
       },
       body: JSON.stringify({
-        model: "flux-pro-latest",
+        model: "flux-pro",
         prompt: prompt,
         n: 1,
         size: "1024x1024"
