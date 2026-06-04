@@ -253,38 +253,50 @@ function getPremiumMockResponse(roomType: string, style: string, budget: number)
 // 2. Redesign POST api
 async function tryGenerateMistralImage(style: string, roomType: string, summary: string, materials: string[], key: string): Promise<string | null> {
   if (!key || key.trim() === "" || key === "MY_MISTRAL_API_KEY") return null;
-  try {
-    console.log("Automatically generating photorealistic design using Mistral flux-pro...");
-    const matsText = materials && materials.length > 0 ? materials.join(", ") : "premium natural materials";
-    const prompt = `A highly realistic, photorealistic, premium interior architecture digest photo taken from inside the room of a newly redesigned ${roomType.toLowerCase()} in a stunning ${style} style. Description: ${summary || ""}. Materials to use: ${matsText}. Strict layout preservation, exact wall placement matching the room, elegant natural direct afternoon lighting, professional 35mm photograph, architectural digest feature look, 8k resolution, ultra realism. STRICTLY INDOOR SHOT, NO EXTERIOR PERSPECTIVE, NO GARDENS, NO EXTERIOR BUILDINGS, DEFINITELY INTERNAL VIEW.`;
-    
-    const response = await fetch("https://api.mistral.ai/v1/images/generations", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${key}`
-      },
-      body: JSON.stringify({
-        model: "flux-pro",
-        prompt: prompt,
-        n: 1,
-        size: "1024x1024"
-      })
-    });
+  
+  const matsText = materials && materials.length > 0 ? materials.join(", ") : "premium natural materials";
+  const prompt = `A highly realistic, photorealistic, premium interior architecture digest photo taken from inside the room of a newly redesigned ${roomType.toLowerCase()} in a stunning ${style} style. Description: ${summary || ""}. Materials to use: ${matsText}. Strict layout preservation, exact wall placement matching the room, elegant natural direct afternoon lighting, professional 35mm photograph, architectural digest feature look, 8k resolution, ultra realism. STRICTLY INDOOR SHOT, NO EXTERIOR PERSPECTIVE, NO GARDENS, NO EXTERIOR BUILDINGS, DEFINITELY INTERNAL VIEW.`;
 
-    if (response.ok) {
-      const resJson: any = await response.json();
-      const url = resJson.data?.[0]?.url;
-      if (url) {
-        console.log("Successfully generated automatic image over Mistral API:", url);
-        return url;
+  const modelsToTry = ["flux-pro-latest", "flux-pro"];
+  
+  for (const model of modelsToTry) {
+    try {
+      console.log(`Automatically generating photorealistic design using Mistral ${model}...`);
+      const response = await fetch("https://api.mistral.ai/v1/images/generations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${key}`
+        },
+        body: JSON.stringify({
+          model: model,
+          prompt: prompt,
+          n: 1,
+          size: "1024x1024"
+        })
+      });
+
+      if (response.ok) {
+        const resJson: any = await response.json();
+        const url = resJson.data?.[0]?.url;
+        if (url) {
+          console.log(`Successfully generated automatic image over Mistral API using model ${model}:`, url);
+          return url;
+        }
+      } else {
+        const errorText = await response.text();
+        console.log(`[Mistral Image Gen Status] API returned error status ${response.status} for model ${model}: ${errorText.substring(0, 150)}...`);
+        
+        // If it is a 404, we can retry with the next model if available
+        if (response.status === 404 && model !== modelsToTry[modelsToTry.length - 1]) {
+          console.log(`Model ${model} not available or returned 404. Trying next fallback...`);
+          continue;
+        }
+        break; // Stop trying if other errors or last model
       }
-    } else {
-      const errorText = await response.text();
-      console.log(`[Mistral Image Gen Status] API returned error status ${response.status}: ${errorText.substring(0, 150)}...`);
+    } catch (err: any) {
+      console.log(`[Mistral Image Gen Warning] Operational failure with ${model}: `, err?.message || err);
     }
-  } catch (err: any) {
-    console.log("[Mistral Image Gen Warning] Network or operational failure: ", err?.message || err);
   }
   return null;
 }
@@ -523,6 +535,198 @@ Priprav kompletný návrh pozostávajúci zo slovenského zhodnotenia pôvodnéh
         ? "Služba je momentálne vyťažená. Váš požiadavok prebehne automaticky o 15 sekúnd."
         : `Chyba pri spracovaní AI redizajnu: ${err.message || err}`
     });
+  }
+});
+
+// Endpoint to proxy Mistral Image Generations (Flux)
+app.post("/api/generate-image", async (req, res) => {
+  const { prompt, model, size, customKey } = req.body;
+
+  if (!prompt || prompt.trim() === "") {
+    return res.status(400).json({ error: "Chýba popisek (prompt) pre generovanie obrázku." });
+  }
+
+  // Choose appropriate key: custom input or server-configured
+  const activeKey = (customKey && customKey.trim() !== "") 
+    ? customKey 
+    : (process.env.MISTRAL_API_KEY || process.env.VITE_MISTRAL_API_KEY);
+
+  const selectedModel = model || "flux-pro";
+  const selectedSize = size || "1024x1024";
+
+  if (!activeKey || activeKey === "MY_MISTRAL_API_KEY" || activeKey.trim() === "") {
+    console.log("[Mistral Proxy] No API Key provided. Executing beautiful keyless simulated response.");
+    
+    // Curated high quality room fallbacks so app remains incredibly interactive and stunning without a key!
+    const fallbacks: Record<string, string[]> = {
+      default: [
+        "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1024&q=80",
+        "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1024&q=80",
+        "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=1024&q=80"
+      ],
+      living: [
+        "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1024&q=80",
+        "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=1024&q=80",
+        "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1024&q=80"
+      ],
+      bedroom: [
+        "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1024&q=80",
+        "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&w=1024&q=80",
+        "https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&w=1024&q=80"
+      ],
+      kitchen: [
+        "https://images.unsplash.com/photo-1556912173-3bb406ef7e77?auto=format&fit=crop&w=1024&q=80",
+        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1024&q=80",
+        "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1024&q=80"
+      ],
+      bathroom: [
+        "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1024&q=80",
+        "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=1024&q=80",
+        "https://images.unsplash.com/photo-1604014237800-1c9102c219da?auto=format&fit=crop&w=1024&q=80"
+      ]
+    };
+
+    let chosenCategory = "default";
+    const lowerPrompt = prompt.toLowerCase();
+    if (lowerPrompt.includes("obýva") || lowerPrompt.includes("living") || lowerPrompt.includes("salon")) chosenCategory = "living";
+    else if (lowerPrompt.includes("spál") || lowerPrompt.includes("bedroom") || lowerPrompt.includes("loznica")) chosenCategory = "bedroom";
+    else if (lowerPrompt.includes("kuch") || lowerPrompt.includes("kitchen") || lowerPrompt.includes("varn")) chosenCategory = "kitchen";
+    else if (lowerPrompt.includes("kúpel") || lowerPrompt.includes("bathroom") || lowerPrompt.includes("wc") || lowerPrompt.includes("van")) chosenCategory = "bathroom";
+
+    const list = fallbacks[chosenCategory];
+    const imgIndex = Math.floor(Math.random() * list.length);
+    const mockUrl = list[imgIndex];
+
+    // Delay response to simulate image generation nicely
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    return res.json({
+      success: true,
+      url: mockUrl,
+      isSimulated: true,
+      message: "Vygenerované v testovacom režime. Pre skutočné vizualizácie vložte Mistral API kľúč."
+    });
+  }
+
+  try {
+    const modelsToTry = selectedModel === "flux-pro" ? ["flux-pro", "flux-pro-latest"] : [selectedModel];
+    let lastStatus = 200;
+    let lastErrorText = "";
+
+    for (const modelAttempt of modelsToTry) {
+      console.log(`[Mistral Proxy] Calling Mistral API with model: ${modelAttempt}, size: ${selectedSize}`);
+      const response = await fetch("https://api.mistral.ai/v1/images/generations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${activeKey}`
+        },
+        body: JSON.stringify({
+          model: modelAttempt,
+          prompt: prompt,
+          n: 1,
+          size: selectedSize
+        })
+      });
+
+      if (response.ok) {
+        const resJson: any = await response.json();
+        const url = resJson.data?.[0]?.url;
+        if (url) {
+          return res.json({
+            success: true,
+            url: url,
+            isSimulated: false
+          });
+        }
+      } else {
+        lastStatus = response.status;
+        lastErrorText = await response.text();
+        console.error(`[Mistral Proxy State] Failure status ${lastStatus} for ${modelAttempt}: ${lastErrorText}`);
+        
+        // Try next fallback if it is a 404
+        if (lastStatus === 404 && modelAttempt !== modelsToTry[modelsToTry.length - 1]) {
+          console.log(`Model ${modelAttempt} not found. Retrying next model in fallback list...`);
+          continue;
+        }
+        break;
+      }
+    }
+
+    // Diagnostics for 404/403/401 errors
+    let userFriendlyError = `Chyba Mistral API (Kód ${lastStatus}): ${lastErrorText || "Nepodarilo sa vygenerovať obrázok."}`;
+    if (lastStatus === 404 || lastStatus === 403) {
+      userFriendlyError = `Chyba Mistral API (Kód ${lastStatus}): Model alebo funkcia generovania obrázkov vyžaduje platený účet s aktívnou platobnou kartou a dostatočným kreditom na konzole Mistral la Plateforme. Bezplatné/skúšobné API kľúče nemajú prístup k prémiovým modelom série FLUX.1.`;
+    } else if (lastStatus === 401) {
+      userFriendlyError = `Chyba Mistral API (Kód 401): Váš zadaný kľúč Mistral API je neplatný alebo vypršala jeho platnosť. Overte si kľúč v nastaveniach la Plateforme.`;
+    }
+
+    return res.status(lastStatus).json({
+      error: userFriendlyError
+    });
+
+  } catch (err: any) {
+    console.error("[Mistral Proxy Error]:", err);
+    return res.status(500).json({
+      error: `Chyba pri kontaktovaní Mistral API: ${err.message || err}`
+    });
+  }
+});
+
+// Endpoint to automatically describe reference images using Gemini and auto-create Flux prompts
+app.post("/api/describe-room", async (req, res) => {
+  const { image, roomType, style, language } = req.body;
+
+  const ai = getGeminiClient();
+  if (!ai) {
+    return res.json({
+      success: true,
+      prompt: `Highly photorealistic design of a modern empty ${roomType || "living room"} converted into a stunning luxury ${style || "Swiss-Minimalist"} masterpiece, with high-end premium furniture, warm indirect lighting, and sustainable natural materials, architectural digest photograph, 8k resolution.`,
+      isSimulated: true,
+      message: "Simulovaný prompt, keďže chýba kľúč pre Gemini."
+    });
+  }
+
+  try {
+    const systemInstruction = "Si interiérový architekt. Na základe obrázku pôvodnej izby a želaného štýlu napíš detailný, vysoko optimalizovaný fotografický prompt pre generátor obrázkov Flux na premenu izby. Prompt MUSÍ byť napísaný v angličtine, pretože modely na generovanie obrázkov reagujú oveľa lepšie na anglické texty.";
+    const contentParts: any[] = [];
+
+    if (image) {
+      const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+      contentParts.push({
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: base64Data
+        }
+      });
+    }
+
+    contentParts.push({
+      text: `Napíš detailný, profesionálny, fotorealistický stabilný prompt v angličtine pre premenu tejto miestnosti (${roomType || "izba"}) do štýlu: ${style || "Moderný minimalizmus"}. Popíš rozloženie nábytku, prémiové materiály, kompozíciu, farby a teplé, upokojujúce svetelné tiene. Zameraj sa čisto na interiér, nepíš žiadne úvodné ani sprievodné texty, iba samotný anglický prompt.`
+    });
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: { parts: contentParts },
+      config: {
+        systemInstruction,
+        temperature: 0.7
+      }
+    });
+
+    const textOutput = response.text;
+    if (textOutput) {
+      return res.json({
+        success: true,
+        prompt: textOutput.trim(),
+        isSimulated: false
+      });
+    } else {
+      throw new Error("Gemini API nevrátilo popis.");
+    }
+  } catch (err: any) {
+    console.error("Describe room error:", err);
+    return res.status(500).json({ error: `Chyba pri analýze priestoru pomocou Gemini: ${err.message || err}` });
   }
 });
 

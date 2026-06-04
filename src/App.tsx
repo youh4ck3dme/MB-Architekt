@@ -34,6 +34,7 @@ import { isFirebaseConfigured, auth, loginAnonymously, loginWithGoogle, Operatio
 import { StorageService } from "./lib/storage";
 import { DesignBoard, UserProfile, CostMetrics, RoomAnalysisResult, FurnitureLayoutItem } from "./types";
 import { jsPDF } from "jspdf";
+import { InteriorGenerator } from "./components/InteriorGenerator";
 
 // Dynamic motivation messages during loading
 const SUBLIMINAL_MESSAGES = [
@@ -56,7 +57,7 @@ export default function App() {
 
 const AFTER_IMAGES_MAPPING: Record<string, Record<string, string>> = {
   "Obývacia izba": {
-    "Swiss-Minimalist": "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80",
+    "Swiss-Minimalist": "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1200&q=80",
     "Japandi": "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1200&q=80",
     "Nordic": "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=1200&q=80",
     "Industrial": "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?auto=format&fit=crop&w=1200&q=80"
@@ -115,6 +116,9 @@ function MainDashboard() {
   // History & Metrics
   const [historyBoards, setHistoryBoards] = useState<DesignBoard[]>([]);
   const [metrics, setMetrics] = useState<CostMetrics>(StorageService.getMetrics());
+  
+  // Interactive workspace module toggle: "blueprint" (advanced CAD & Analysis suite) or "generator" (Mistral Flux rendering)
+  const [workspaceMode, setWorkspaceMode] = useState<"blueprint" | "generator">("blueprint");
 
   // Resiliency and HTTP 429 banner
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
@@ -1712,6 +1716,42 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
         </div>
       </header>
 
+      {/* WORKSPACE MODE SWITCHER TABS (BLUEPRINT VS MISTRAL GENERATOR) */}
+      <section className="bg-[#1C1C1C] text-[#FAF9F6] border-b border-black">
+        <div className="max-w-7xl mx-auto px-4 md:px-12 flex items-center justify-between">
+          <div className="flex">
+            <button
+              onClick={() => setWorkspaceMode("blueprint")}
+              className={`py-3.5 px-6 text-xs font-mono uppercase tracking-widest border-b-2 transition-all cursor-pointer flex items-center space-x-2 ${
+                workspaceMode === "blueprint"
+                  ? "border-amber-400 text-white font-bold bg-white/5"
+                  : "border-transparent text-gray-400 hover:text-white"
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>CAD Analýza & Kótovanie</span>
+            </button>
+
+            <button
+              onClick={() => setWorkspaceMode("generator")}
+              className={`py-3.5 px-6 text-xs font-mono uppercase tracking-widest border-b-2 transition-all cursor-pointer flex items-center space-x-2 ${
+                workspaceMode === "generator"
+                  ? "border-amber-400 text-white font-bold bg-white/5"
+                  : "border-transparent text-gray-400 hover:text-white"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Fotorealistický Generátor (Flux)</span>
+            </button>
+          </div>
+          
+          <div className="hidden sm:flex items-center space-x-2 text-[10px] font-mono text-gray-400 uppercase tracking-widest pr-4 select-none">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span>PWA Standalone</span>
+          </div>
+        </div>
+      </section>
+
       {/* DETAILED COST & CREDIT SIMULATOR BANNER (Requirement 4) */}
       <section className="bg-white border-b border-[#1C1C1C]/10 py-4 px-6 md:px-12 select-none">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
@@ -1770,8 +1810,11 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
         </div>
       </section>
 
-      {/* CORE WORKSPACE BENTO GRID */}
-      <main className="flex-1 w-full max-w-7xl mx-auto py-4 md:py-8 px-4 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      {/* CORE WORKSPACE CONSOLE SELECTOR TABS */}
+      {workspaceMode === "blueprint" ? (
+        <>
+          {/* CORE WORKSPACE BENTO GRID */}
+          <main className="flex-1 w-full max-w-7xl mx-auto py-4 md:py-8 px-4 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* LEFT COLUMN: DESIGN INPUT MODULE (Width: 5/12) */}
         <section className="lg:col-span-5 bg-white border border-[#1C1C1C]/10 shadow-sm p-4 md:p-8 flex flex-col justify-between">
@@ -2895,6 +2938,12 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
           )}
         </div>
       </section>
+        </>
+      ) : (
+        <main className="flex-1 w-full max-w-7xl mx-auto py-4 md:py-8 px-4 md:px-12">
+          <InteriorGenerator />
+        </main>
+      )}
 
       {/* FOOTER */}
       <footer className="bg-white border-t border-[#1C1C1C]/10 py-6 px-6 md:px-12 mt-auto">

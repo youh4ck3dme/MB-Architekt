@@ -1,0 +1,30 @@
+{
+  "name": "AI Redizajn Interiéru",
+  "short_name": "RedizajnAI",
+  "description": "Fotorealistické generovanie interiérov a stavebné dispozičné kótovanie pomocou Mistral AI a Gemini.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF9F6",
+  "theme_color": "#1C1C1C",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/isometric/192/structural.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://img.icons8.com/isometric/512/structural.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://img.icons8.com/isometric/192/structural.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
