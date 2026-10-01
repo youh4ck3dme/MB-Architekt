@@ -199,7 +199,8 @@ export function InteriorGenerator() {
         body: JSON.stringify({
           image: referenceImage, // image description if uploaded
           roomType,
-          style
+          style,
+          userWishes: prompt.trim() || undefined
         })
       });
 

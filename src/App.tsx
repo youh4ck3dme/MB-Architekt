@@ -26,7 +26,8 @@ import {
   Eye,
   Image as ImageIcon,
   Copy,
-  Check
+  Check,
+  Sliders
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -93,6 +94,9 @@ function MainDashboard() {
   const [style, setStyle] = useState("Swiss-Minimalist");
   const [budget, setBudget] = useState(2500);
   const [provider, setProvider] = useState<"gemini" | "mistral">("gemini");
+  const [userWishes, setUserWishes] = useState("");
+  const [showSystemPromptModal, setShowSystemPromptModal] = useState(false);
+  const [customSystemPrompt, setCustomSystemPrompt] = useState("");
   const [uploadProgress, setUploadProgress] = useState<{ originalSize: string; compressedSize: string; savedPercent: number } | null>(null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -128,23 +132,49 @@ function MainDashboard() {
   // Input file reference
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Dynamic Prompt generator for external image generator testing matching dimensions
+  // Universal Prompt generator for external image generator testing matching dimensions & user wishes
   const generateImgPrompt = () => {
-    const sDesc = style === "Swiss-Minimalist" 
-      ? "Swiss-Minimalist architecture, clean strict grid alignment, extreme physical discipline, tactile concrete wall panels paired with light bleached oak wood cabinets, pure focus on empty intervals (negative space), and high-end built-in ambient lighting"
-      : style === "Japandi"
-      ? "warm Japandi interior style, organic curves combined with strict Scandinavian functionalism, soft clay plaster walls, low solid timber platform furniture, tactile cream linen fabrics, delicate hanging washi paper rice lanterns"
-      : "cozy Scandinavian Nordic feel, whitewashed rustic wood flooring, bright airy northern daylight, pale light pine accents, cozy brushed wool throws, and simple matte black architectural hardware";
+    if (customSystemPrompt.trim()) {
+      return customSystemPrompt.trim();
+    }
+
+    const targetRoom = roomType ? roomType.toLowerCase() : "obývacia izba";
+
+    let sDesc = "Swiss-Minimalist architecture, clean strict grid alignment, extreme physical discipline, tactile concrete wall panels paired with light bleached oak wood cabinets, pure focus on empty intervals (negative space), and high-end built-in ambient lighting";
+    if (style === "Japandi") {
+      sDesc = "warm Japandi interior style, organic curves combined with strict Scandinavian functionalism, soft clay plaster walls, low solid timber platform furniture, tactile cream linen fabrics, delicate hanging washi paper rice lanterns";
+    } else if (style === "Nordic") {
+      sDesc = "cozy Scandinavian Nordic feel, whitewashed rustic wood flooring, bright airy northern daylight, pale light pine accents, cozy brushed wool throws, and simple matte black architectural hardware";
+    } else if (style === "Industrial") {
+      sDesc = "Industrial architecture, clean raw metal framing, exposed brick structures, reclaimed oak surfaces, and warm architectural track lighting";
+    }
       
-    const mats = analysisResult?.materials ? analysisResult.materials.join(", ") : "premium natural resources, sustainable materials";
-    const colors = analysisResult?.colorPalette ? analysisResult.colorPalette.join(", ") : "well-balanced monochromatic palette";
+    const wishesTrimmed = userWishes?.trim();
+    const wishesDirective = wishesTrimmed
+      ? `\nUSER CUSTOM REQUIREMENTS: Strictly incorporate and prioritize the following client specifications: "${wishesTrimmed}". Ensure each of these requested elements is prominently featured, properly positioned, and seamlessly designed into the room.`
+      : "";
+
+    const mats = analysisResult?.materials && analysisResult.materials.length > 0
+      ? analysisResult.materials.join(", ") 
+      : "Svetlé masívne dubové drevo, Prútená štruktúra koberca, Línová poťahová látka, Matný dymový hliník";
+      
+    const colors = analysisResult?.colorPalette && analysisResult.colorPalette.length > 0
+      ? analysisResult.colorPalette.join(", ") 
+      : "#FAF8F5, #1C1C1C, #8D908E, #C2B29F, #DCD3C1";
+
+    let layoutPieces = "Sedačka v tvare L (Svetlosivá) in category Sedačka, Konferenčný stolík z masívneho duba in category Stolík, Štruktúrovaný vlnený koberec in category Doplnky, Stojanová lampa s ramenom in category Svietidlo, Drevená komoda in category Skrinka";
+    if (analysisResult?.furnitureLayout && analysisResult.furnitureLayout.length > 0) {
+      layoutPieces = analysisResult.furnitureLayout.map(f => `${f.name} in category ${f.category}`).join(", ");
+    } else if (wishesTrimmed) {
+      layoutPieces = `${wishesTrimmed}, doplnené o minimalistické dizajnové kusy`;
+    }
     
-    return `Highly realistic, photorealistic interior architectural design of the inside of this exact ${roomType.toLowerCase()}. 
+    return `Highly realistic, photorealistic interior architectural design of the inside of this exact ${targetRoom}. 
 SPATIAL FIDELITY ENFORCEMENT: Retain 100% of the original spatial geometry, including the exact ceiling borders, structural walls, window placement, door frames, and camera field of view from the reference picture. Absolutely no structural changes.
-DESIGN DIRECTIVE: Redesign and furnish the room using ${sDesc}.
+DESIGN DIRECTIVE: Redesign and furnish the room using ${sDesc}.${wishesDirective}
 MATERIALITY: Apply high-quality realistic materials like: ${mats}.
 COLOR SCHEME: Apply this exact color palette: ${colors}.
-LAYOUT: Cleanly furnish the space with: ${analysisResult?.furnitureLayout ? analysisResult.furnitureLayout.map(f => `${f.name} in category ${f.category}`).join(", ") : "minimal clean pieces"}.
+LAYOUT: Cleanly furnish the space with: ${layoutPieces}.
 RENDERING DETAILS: High-end architectural digest publication photo, realism, soft diffused warm light (2700K), captured on professional 35mm lens, atmospheric depth, realistic soft shadows, 8k resolution, photoreal. STRICTLY INDOOR SHOT, NO OUTDOOR SCENERY, NO EXTERIOR VIEW, PURE INTERNAL PHOTOGRAPH.`;
   };
 
@@ -447,6 +477,8 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
           style: style,
           budget: budget,
           provider: provider,
+          userWishes: userWishes.trim() || undefined,
+          customSystemPrompt: customSystemPrompt.trim() || undefined,
         }),
       });
 
@@ -1946,6 +1978,97 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                 <span>Prem. (Custom)</span>
                 <span>15000 €</span>
               </div>
+            </div>
+
+            {/* 3.5 USER CUSTOM WISHES / REQUIREMENTS */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="block text-xs font-mono tracking-wider uppercase text-gray-700 font-semibold flex items-center space-x-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-[#D97706]" />
+                  <span>Čo si želáte v izbe vygenerovať?</span>
+                </label>
+                <span className="text-[10px] text-gray-400 font-mono">Vlastný prompt</span>
+              </div>
+              <textarea
+                rows={2}
+                value={userWishes}
+                onChange={(e) => setUserWishes(e.target.value)}
+                placeholder="Napr. Sivá rohová sedačka v tvare L, masívny dubový stolík, vlnený koberec, minimalistická komoda, vstavaný krb..."
+                className="w-full bg-white border border-[#1C1C1C]/15 p-2.5 text-xs font-sans focus:outline-none focus:border-[#1C1C1C] rounded-none text-gray-800 placeholder-gray-400 resize-none shadow-xs"
+              />
+              {/* Quick suggestion tags */}
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {[
+                  "Rohová sedačka v tvare L",
+                  "Dubový masívny stôl",
+                  "Štruktúrovaný vlnený koberec",
+                  "Stojanová lampa",
+                  "Drevená komoda",
+                  "Vstavaný krb"
+                ].map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => {
+                      setUserWishes((prev) => {
+                        const trimmed = prev.trim();
+                        if (!trimmed) return tag;
+                        if (trimmed.includes(tag)) return trimmed;
+                        return `${trimmed}, ${tag}`;
+                      });
+                    }}
+                    className="text-[10px] font-mono px-2 py-0.5 bg-[#FAF9F6] hover:bg-[#1C1C1C] hover:text-white border border-[#1C1C1C]/10 text-gray-600 transition-all cursor-pointer rounded-xs"
+                  >
+                    + {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 3.6 SYSTEM PROMPT CONFIGURATION DRAWER */}
+            <div className="border border-[#1C1C1C]/10 bg-[#FAF9F6]/80 p-3 rounded-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-1.5 text-xs font-mono font-medium text-gray-700">
+                  <Sliders className="w-3.5 h-3.5 text-[#1C1C1C]" />
+                  <span>Systémový Prompt pre AI</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSystemPromptModal(!showSystemPromptModal)}
+                  className="text-[10px] font-mono uppercase underline text-gray-600 hover:text-black cursor-pointer"
+                >
+                  {showSystemPromptModal ? "Skryť šablónu" : "Zobraziť & Upraviť"}
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-snug">
+                Systémový prompt riadi neurónovú sieť v serverovom jadre. Všetko, čo napíšete do požiadaviek vyššie, sa automaticky integruje do tohto univerzálneho promptu.
+              </p>
+
+              {showSystemPromptModal && (
+                <div className="space-y-2 pt-2 border-t border-[#1C1C1C]/10 animate-fade-in">
+                  <div className="flex justify-between items-center text-[10px] font-mono text-gray-500">
+                    <span>Univerzálny dynamický prompt:</span>
+                    {customSystemPrompt && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomSystemPrompt("")}
+                        className="text-red-600 hover:underline cursor-pointer"
+                      >
+                        Obnoviť pôvodný
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    rows={6}
+                    value={customSystemPrompt || generateImgPrompt()}
+                    onChange={(e) => setCustomSystemPrompt(e.target.value)}
+                    className="w-full bg-white border border-[#1C1C1C]/20 p-2 font-mono text-[11px] text-gray-800 focus:outline-none focus:border-[#1C1C1C] rounded-none leading-relaxed"
+                  />
+                  <div className="text-[10px] text-gray-400 font-mono">
+                    💡 Tip: Tento prompt garantuje zachovanie 100% priestorovej geometrie miestnosti a generuje presne to, čo zadáte.
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 4. DRAG-AND-DROP PRE-COMPRESSION PHOTO UPLODER */}

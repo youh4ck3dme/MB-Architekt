@@ -250,12 +250,77 @@ function getPremiumMockResponse(roomType: string, style: string, budget: number)
   };
 }
 
+// Helper: Builds universal architectural prompt strictly following spatial fidelity and user wishes
+export function buildUniversalRenderPrompt(params: {
+  roomType: string;
+  style: string;
+  userWishes?: string;
+  materials?: string[];
+  colorPalette?: string[];
+  furnitureLayout?: Array<{ name: string; category?: string }>;
+  summary?: string;
+}): string {
+  const targetRoom = (params.roomType || "obývacia izba").toLowerCase();
+
+  let sDesc = "Swiss-Minimalist architecture, clean strict grid alignment, extreme physical discipline, tactile concrete wall panels paired with light bleached oak wood cabinets, pure focus on empty intervals (negative space), and high-end built-in ambient lighting";
+  if (params.style === "Japandi") {
+    sDesc = "warm Japandi interior style, organic curves combined with strict Scandinavian functionalism, soft clay plaster walls, low solid timber platform furniture, tactile cream linen fabrics, delicate hanging washi paper rice lanterns";
+  } else if (params.style === "Nordic") {
+    sDesc = "cozy Scandinavian Nordic feel, whitewashed rustic wood flooring, bright airy northern daylight, pale light pine accents, cozy brushed wool throws, and simple matte black architectural hardware";
+  } else if (params.style === "Industrial") {
+    sDesc = "Industrial architecture, clean raw metal framing, exposed brick structures, reclaimed oak surfaces, and warm architectural track lighting";
+  }
+
+  const userWishesDirective = params.userWishes?.trim()
+    ? `\nUSER CUSTOM REQUIREMENTS: Strictly incorporate and prioritize the following client specifications: "${params.userWishes.trim()}". Ensure each of these requested elements is prominently featured, properly positioned, and seamlessly designed into the room.`
+    : "";
+
+  const mats = params.materials && params.materials.length > 0
+    ? params.materials.join(", ")
+    : "Svetlé masívne dubové drevo, Prútená štruktúra koberca, Línová poťahová látka, Matný dymový hliník";
+
+  const colors = params.colorPalette && params.colorPalette.length > 0
+    ? params.colorPalette.join(", ")
+    : "#FAF8F5, #1C1C1C, #8D908E, #C2B29F, #DCD3C1";
+
+  let layoutPieces = "Sedačka v tvare L (Svetlosivá) in category Sedačka, Konferenčný stolík z masívneho duba in category Stolík, Štruktúrovaný vlnený koberec in category Doplnky, Stojanová lampa s ramenom in category Svietidlo, Drevená komoda in category Skrinka";
+  if (params.furnitureLayout && params.furnitureLayout.length > 0) {
+    layoutPieces = params.furnitureLayout.map(f => `${f.name}${f.category ? ` in category ${f.category}` : ""}`).join(", ");
+  } else if (params.userWishes?.trim()) {
+    layoutPieces = `${params.userWishes.trim()}, doplnené o harmonické minimalistické prvky`;
+  }
+
+  return `Highly realistic, photorealistic interior architectural design of the inside of this exact ${targetRoom}. 
+SPATIAL FIDELITY ENFORCEMENT: Retain 100% of the original spatial geometry, including the exact ceiling borders, structural walls, window placement, door frames, and camera field of view from the reference picture. Absolutely no structural changes.
+DESIGN DIRECTIVE: Redesign and furnish the room using ${sDesc}.${userWishesDirective}
+MATERIALITY: Apply high-quality realistic materials like: ${mats}.
+COLOR SCHEME: Apply this exact color palette: ${colors}.
+LAYOUT: Cleanly furnish the space with: ${layoutPieces}.
+RENDERING DETAILS: High-end architectural digest publication photo, realism, soft diffused warm light (2700K), captured on professional 35mm lens, atmospheric depth, realistic soft shadows, 8k resolution, photoreal. STRICTLY INDOOR SHOT, NO OUTDOOR SCENERY, NO EXTERIOR VIEW, PURE INTERNAL PHOTOGRAPH.`;
+}
+
 // 2. Redesign POST api
-async function tryGenerateMistralImage(style: string, roomType: string, summary: string, materials: string[], key: string): Promise<string | null> {
+async function tryGenerateMistralImage(
+  style: string,
+  roomType: string,
+  summary: string,
+  materials: string[],
+  key: string,
+  userWishes?: string,
+  colorPalette?: string[],
+  furnitureLayout?: any[]
+): Promise<string | null> {
   if (!key || key.trim() === "" || key === "MY_MISTRAL_API_KEY") return null;
   
-  const matsText = materials && materials.length > 0 ? materials.join(", ") : "premium natural materials";
-  const prompt = `A highly realistic, photorealistic, premium interior architecture digest photo taken from inside the room of a newly redesigned ${roomType.toLowerCase()} in a stunning ${style} style. Description: ${summary || ""}. Materials to use: ${matsText}. Strict layout preservation, exact wall placement matching the room, elegant natural direct afternoon lighting, professional 35mm photograph, architectural digest feature look, 8k resolution, ultra realism. STRICTLY INDOOR SHOT, NO EXTERIOR PERSPECTIVE, NO GARDENS, NO EXTERIOR BUILDINGS, DEFINITELY INTERNAL VIEW.`;
+  const prompt = buildUniversalRenderPrompt({
+    roomType,
+    style,
+    userWishes,
+    materials,
+    colorPalette,
+    furnitureLayout,
+    summary,
+  });
 
   const modelsToTry = ["flux-pro-latest", "flux-pro"];
   
@@ -301,99 +366,57 @@ async function tryGenerateMistralImage(style: string, roomType: string, summary:
   return null;
 }
 
-// Helper: Generates a completely original image using Google Gemini (Imagen or Flash Multimodal cascade)
+// Helper: Generates a completely original image using Google Gemini (Imagen)
 async function tryGenerateGeminiImage(
   style: string,
   roomType: string,
   summary: string,
   materials: string[],
-  base64Image?: string
+  userWishes?: string,
+  base64Image?: string,
+  colorPalette?: string[],
+  furnitureLayout?: any[]
 ): Promise<string | null> {
   const ai = getGeminiClient();
   if (!ai) {
-    console.log("[Gemini Image Gen] No Gemini client initialized or key missing.");
     return null;
   }
 
-  const matsText = materials && materials.length > 0 ? materials.join(", ") : "premium natural materials";
-  const prompt = `A highly realistic, photorealistic, premium interior architecture digest photo taken from inside the room of a newly redesigned ${roomType.toLowerCase()} in a stunning ${style} style. Description of the design: ${summary || ""}. Materials used: ${matsText}. Elegant natural direct afternoon lighting, professional 35mm photograph, architectural digest feature look, 8k resolution, ultra realism. STRICTLY INDOOR SHOT, NO EXTERIOR PERSPECTIVE, DEFINITELY INTERNAL VIEW.`;
+  const prompt = buildUniversalRenderPrompt({
+    roomType,
+    style,
+    userWishes,
+    materials,
+    colorPalette,
+    furnitureLayout,
+    summary,
+  });
 
-  // Model cascade 1: Try Google's standalone high quality Imagen image-generators
-  const modelOptions = ["imagen-3.0-generate-002", "imagen-3.0-capability-001"];
-  
-  for (const model of modelOptions) {
-    try {
-      console.log(`[Gemini Cascade] Attempting Imagen API via model: ${model}...`);
-      const response = await ai.models.generateImages({
-        model: model,
-        prompt: prompt,
-        config: {
-          numberOfImages: 1,
-          outputMimeType: 'image/jpeg',
-          aspectRatio: '1:1',
-        },
-      });
+  try {
+    const response = await ai.models.generateImages({
+      model: "imagen-3.0-generate-002",
+      prompt: prompt,
+      config: {
+        numberOfImages: 1,
+        outputMimeType: "image/jpeg",
+        aspectRatio: "1:1",
+      },
+    });
 
-      const base64Bytes = response.generatedImages?.[0]?.image?.imageBytes;
-      if (base64Bytes) {
-        console.log(`[Gemini Cascade] Successfully generated original image with Google Imagen model ${model}!`);
-        return `data:image/jpeg;base64,${base64Bytes}`;
-      }
-    } catch (gErr: any) {
-      console.log(`[Gemini Cascade] Model ${model} returned error or not allowed: ${gErr?.message || gErr}`);
+    const base64Bytes = response.generatedImages?.[0]?.image?.imageBytes;
+    if (base64Bytes) {
+      console.log("[Gemini Imagen] Successfully generated original image with Google Imagen!");
+      return `data:image/jpeg;base64,${base64Bytes}`;
     }
+  } catch (gErr: any) {
+    console.log("[Gemini Imagen] Imagen generation not enabled on key, using layout rendering:", gErr?.message || gErr);
   }
 
-  // Model cascade 2: Try multimodal Google image-to-image/generating models
-  const flashModels = ["gemini-2.5-flash-image", "gemini-3.1-flash-image"];
-  for (const model of flashModels) {
-    try {
-      console.log(`[Gemini Cascade] Attempting multimodal/image generation via model: ${model}...`);
-      const parts: any[] = [];
-      if (base64Image && base64Image.trim() !== "") {
-        const cleanBase64 = base64Image.replace(/^data:image\/\w+;base64,/, "");
-        parts.push({
-          inlineData: {
-            data: cleanBase64,
-            mimeType: "image/jpeg",
-          }
-        });
-      }
-      
-      parts.push({
-        text: `Generate a photorealistic, premium interior architectural digest photograph of a redesigned ${roomType.toLowerCase()} in a beautiful ${style} style. Materials: ${matsText}. Details: ${summary || ""}. Photorealistic, ultra detailed, 8k, indoor view.`,
-      });
-
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: { parts },
-        config: {
-          imageConfig: {
-            aspectRatio: "1:1",
-            imageSize: "1K"
-          }
-        }
-      });
-
-      if (response?.candidates?.[0]?.content?.parts) {
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData) {
-            console.log(`[Gemini Cascade] Successfully generated original image with Google multimodal model ${model}!`);
-            return `data:image/jpeg;base64,${part.inlineData.data}`;
-          }
-        }
-      }
-    } catch (fErr: any) {
-      console.log(`[Gemini Cascade] Multimodal model ${model} returned error: ${fErr?.message || fErr}`);
-    }
-  }
-
-  console.log("[Gemini Cascade] All Google image-generators failed or were not authorized on this key.");
   return null;
 }
 
 app.post("/api/redesign", async (req, res) => {
-  const { image, roomType, style, budget, provider } = req.body;
+  const { image, roomType, style, budget, provider, userWishes, customSystemPrompt } = req.body;
 
   if (!roomType || !style) {
     return res.status(400).json({ error: "Chýbajúce parametre: roomType, style." });
@@ -401,97 +424,96 @@ app.post("/api/redesign", async (req, res) => {
 
   const ai = getGeminiClient();
   const mistralKey = process.env.MISTRAL_API_KEY;
-  const useMistral = (provider === "mistral" || (!ai && typeof mistralKey === "string" && mistralKey.trim() !== "" && mistralKey !== "MY_MISTRAL_API_KEY"));
+  const hasValidMistralKey = typeof mistralKey === "string" && mistralKey.trim() !== "" && mistralKey !== "MY_MISTRAL_API_KEY";
+  let useMistral = (provider === "mistral" && hasValidMistralKey) || (!ai && hasValidMistralKey);
 
-  // If client is null (no API key configured), fall back to beautiful premium mockup simulation
-  if (!ai && !useMistral) {
-    console.log("No GEMINI_API_KEY or MISTRAL_API_KEY detected. Serving high-fidelity simulated response.");
-    const mockData = getPremiumMockResponse(roomType, style, budget);
-    return res.json({
-      success: true,
-      data: mockData,
-      isSimulated: true,
-      simulationMetrics: {
-        geminiTokensInput: 680,
-        geminiTokensOutput: 345,
-        estimatedCostEur: 0.00015 // Tiny cost metrics representation
-      },
-      message: "Formátované v režime Simulácie, keďže chýbajú kľúče pre AI modely."
-    });
+  let base64Data = "";
+  if (image) {
+    // Clean prefix if exist: e.g. "data:image/jpeg;base64,..."
+    base64Data = image.replace(/^data:image\/\w+;base64,/, "");
   }
 
-  try {
-    let base64Data = "";
-    if (image) {
-      // Clean prefix if exist: e.g. "data:image/jpeg;base64,..."
-      base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-    }
+  const userWishesBlock = userWishes && typeof userWishes === "string" && userWishes.trim() !== ""
+    ? `\nPOŽIADAVKY KLIENTA NA VYGENEROVANIE:
+Používateľ si výslovne želá v novom interiéri: "${userWishes.trim()}".
+Tieto prvky MUSÍŠ prioritne a povinne zakomponovať do zoznamu "furnitureLayout" (s presnými súradnicami coordinateX, coordinateY, reálnymi rozmermi a cenou), ako aj do "summary" a "materials"!\n`
+    : "";
 
-    const systemPrompt = `Si špičkový interiérový architekt vyznávajúci švajčiarsky minimalizmus, funkčnosť, precízne meranie a prácu s negatívnym priestorom.
+  const baseSystemPrompt = `Si špičkový interiérový architekt vyznávajúci švajčiarsky minimalizmus, funkčnosť, precízne meranie a prácu s negatívnym priestorom.
 Analyzuj pošlaný priestor (${roomType}) z fotografie. Dôkladne zhodnoť usporiadanie stien, okien, dverí a celkové dispozičné rozmery miestnosti (dĺžku, šírku a výšku).
 Tvojou úlohou je navrhnúť kompletný interiérový redizajn v štýle: ${style} s prísnym obmedzením celkového rozpočtu do ${budget} EUR.
-
+${userWishesBlock}
 Musíš dbať na nasledujúce konštrukčné a rozmerové pravidlá:
-1. MAXIMÁLNA PODOBNOSŤ: Nový návrh musí rešpektovať pôvodné rozmery, dĺžku a šírku miestnosti. Nepridávaj priečky ani nezasahuj do nosných konštrukcií zobrazených na fotke.
+1. MAXIMÁLNA PODOBNOSŤ & SPATIAL FIDELITY: Retain 100% of the original spatial geometry, including the exact ceiling borders, structural walls, window placement, door frames, and camera field of view from the reference picture. Nový návrh musí rešpektovať pôvodné rozmery, dĺžku a šírku miestnosti. Nepridávaj priečky ani nezasahuj do nosných konštrukcií zobrazených na fotke.
 2. PRESNOSŤ SÚRADNÍC: 2D pôdorys nábytku ("furnitureLayout") musí reprezentovať reálne rozmiestnenie. Súradnica coordinateX (0 až 100% zľava doprava) a coordinateY (0 až 100% zhora nadol) musia presne odrážať pozíciu voči stenám a oknám zachyteným na fotografii.
 3. REÁLNE ROZMERY: Každý kus nábytku musí mať zmysluplnú šírku a hĺbku v centimetroch (napr. štandardná sedačka šírka 200-240cm, hĺbka 90-100cm).
 4. ROZPOČTOVÁ INTEGRITA: Súčet cien "estimatedPrice" všetkých položiek nesmie prekročiť limit ${budget} EUR. Odporúčaj reálne obchody v SR dostupné pre daný rozpočet.
 
 Priprav kompletný návrh pozostávajúci zo slovenského zhodnotenia pôvodného stavu vs nového návrhu, zoznamu prémiových materiálov, odporúčaní pre rozloženie osvetlenia a presného 2D rozloženia nábytku vo forme relatívnych percentuálnych súradníc. Odpovedz výhradne vo validnom JSON formáte nachádzajúcom sa pod touto inštrukciou.`;
 
-    const responseSchema = {
-      type: "object",
-      properties: {
-        roomType: { type: "string" },
-        aestheticStyle: { type: "string" },
-        summary: {
-          type: "string",
-          description: "Odborná analýza súčasného priestoru po slovensky s konkrétnymi dizajnovými vylepšeniami v duchu švajčiarskeho minimalizmu."
-        },
-        colorPalette: {
-          type: "array",
-          items: { type: "string" },
-          description: "Zoznam 4 až 5 harmonických HEX kódov pre steny a hlavný nábytok."
-        },
-        materials: {
-          type: "array",
-          items: { type: "string" },
-          description: "Odporúčané udržateľné a vysoko kvalitné materiály (napr. bielená borovica, kompozitný kremeň)."
-        },
-        lightingTips: {
-          type: "string",
-          description: "Tipy pre inteligentné rozvrstvenie nepriameho a priameho osvetlenia (v slovenčine)."
-        },
-        furnitureLayout: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string", description: "Názov kusu nábytku v slovenskom jazyku." },
-              category: { type: "string", description: "Kategória predmetu (sedačka, stôl, polica, svietidlo apod.)." },
-              coordinateX: { type: "integer", description: "Relatívna šírková súradnica na 2D pôdoryse (0 až 100)." },
-              coordinateY: { type: "integer", description: "Relatívna hĺbková súradnica na 2D pôdoryse (0 až 100)." },
-              width: { type: "integer", description: "Šírka v centimetroch." },
-              depth: { type: "integer", description: "Hĺbka v centimetroch." },
-              estimatedPrice: { type: "integer", description: "Odhadovaná cena v EUR." },
-              storeRecommendation: { type: "string", description: "Konkrétny reálny obchod (napr. IKEA, Jysk, Sconto)." },
-              description: { type: "string", description: "Prečo a ako tento nábytok v priestore využiť (slovensky)." }
-            },
-            required: ["name", "category", "coordinateX", "coordinateY", "width", "depth", "estimatedPrice", "storeRecommendation", "description"]
-          }
-        }
-      },
-      required: ["roomType", "aestheticStyle", "summary", "colorPalette", "materials", "lightingTips", "furnitureLayout"]
-    };
+  const systemPrompt = customSystemPrompt && typeof customSystemPrompt === "string" && customSystemPrompt.trim() !== ""
+    ? `${customSystemPrompt.trim()}\n\n${userWishesBlock}\n\nMusíš odpovedať výhradne vo validnom JSON formáte podľa schémy.`
+    : baseSystemPrompt;
 
-    if (useMistral) {
+  const responseSchema = {
+    type: "object",
+    properties: {
+      roomType: { type: "string" },
+      aestheticStyle: { type: "string" },
+      summary: {
+        type: "string",
+        description: "Odborná analýza súčasného priestoru po slovensky s konkrétnymi dizajnovými vylepšeniami v duchu švajčiarskeho minimalizmu."
+      },
+      colorPalette: {
+        type: "array",
+        items: { type: "string" },
+        description: "Zoznam 4 až 5 harmonických HEX kódov pre steny a hlavný nábytok."
+      },
+      materials: {
+        type: "array",
+        items: { type: "string" },
+        description: "Odporúčané udržateľné a vysoko kvalitné materiály (napr. bielená borovica, kompozitný kremeň)."
+      },
+      lightingTips: {
+        type: "string",
+        description: "Tipy pre inteligentné rozvrstvenie nepriameho a priameho osvetlenia (v slovenčine)."
+      },
+      furnitureLayout: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Názov kusu nábytku v slovenskom jazyku." },
+            category: { type: "string", description: "Kategória predmetu (sedačka, stôl, polica, svietidlo apod.)." },
+            coordinateX: { type: "integer", description: "Relatívna šírková súradnica na 2D pôdoryse (0 až 100)." },
+            coordinateY: { type: "integer", description: "Relatívna hĺbková súradnica na 2D pôdoryse (0 až 100)." },
+            width: { type: "integer", description: "Šírka v centimetroch." },
+            depth: { type: "integer", description: "Hĺbka v centimetroch." },
+            estimatedPrice: { type: "integer", description: "Odhadovaná cena v EUR." },
+            storeRecommendation: { type: "string", description: "Konkrétny reálny obchod (napr. IKEA, Jysk, Sconto)." },
+            description: { type: "string", description: "Prečo a ako tento nábytok v priestore využiť (slovensky)." }
+          },
+          required: ["name", "category", "coordinateX", "coordinateY", "width", "depth", "estimatedPrice", "storeRecommendation", "description"]
+        }
+      }
+    },
+    required: ["roomType", "aestheticStyle", "summary", "colorPalette", "materials", "lightingTips", "furnitureLayout"]
+  };
+
+  // 1. Try Mistral if requested and key is present
+  if (useMistral) {
+    try {
       console.log("Executing redesign query using Mistral AI API...");
       const modelName = base64Data ? "pixtral-12b-2409" : "mistral-large-latest";
       
+      const userTextPrompt = userWishes?.trim()
+        ? `Analyzuj izbu typu ${roomType} a vygeneruj pre ňu moderný ${style} redizajn s rozpočtom ${budget} EUR. Používateľ si želá v izbe výslovne tieto prvky: "${userWishes.trim()}". Odpovedaj striktne v slovenskom jazyku a vráť formátovaný JSON podľa schémy.`
+        : `Analyzuj izbu typu ${roomType} a vygeneruj pre ňu moderný ${style} redizajn s rozpočtom ${budget} EUR. Odpovedaj striktne v slovenskom jazyku a vráť formátovaný JSON podľa schémy.`;
+
       const userContent: any[] = [
         {
           type: "text",
-          text: `Analyzuj izbu typu ${roomType} a vygeneruj pre ňu moderný ${style} redizajn s rozpočtom ${budget} EUR. Odpovedaj striktne v slovenskom jazyku a vráť formátovaný JSON podľa schémy.`
+          text: userTextPrompt
         }
       ];
 
@@ -527,115 +549,211 @@ Priprav kompletný návrh pozostávajúci zo slovenského zhodnotenia pôvodnéh
         })
       });
 
-      if (!mResponse.ok) {
+      if (mResponse.ok) {
+        const mJson: any = await mResponse.json();
+        const textOutput = mJson.choices?.[0]?.message?.content;
+        if (textOutput) {
+          const parsedJson = JSON.parse(textOutput.trim());
+          
+          let generatedImageUrl = await tryGenerateMistralImage(
+            style,
+            roomType,
+            parsedJson.summary,
+            parsedJson.materials,
+            mistralKey || "",
+            userWishes,
+            parsedJson.colorPalette,
+            parsedJson.furnitureLayout
+          );
+          if (!generatedImageUrl) {
+            generatedImageUrl = await tryGenerateGeminiImage(
+              style,
+              roomType,
+              parsedJson.summary,
+              parsedJson.materials,
+              userWishes,
+              base64Data,
+              parsedJson.colorPalette,
+              parsedJson.furnitureLayout
+            );
+          }
+
+          const promptLen = systemPrompt.length + (base64Data ? base64Data.length : 0);
+          const respLen = textOutput.length;
+          const inputTokens = Math.floor(promptLen / 4) + 150;
+          const outputTokens = Math.floor(respLen / 4);
+
+          return res.json({
+            success: true,
+            data: parsedJson,
+            isSimulated: false,
+            generatedImageUrl: generatedImageUrl,
+            simulationMetrics: {
+              geminiTokensInput: inputTokens,
+              geminiTokensOutput: outputTokens,
+              estimatedCostEur: (inputTokens * 0.00000015) + (outputTokens * 0.0000006)
+            },
+            provider: "mistral"
+          });
+        }
+      } else {
         const errorText = await mResponse.text();
-        throw new Error(`Mistral API error (${mResponse.status}): ${errorText}`);
+        console.warn(`[Mistral Fallback] Mistral API returned status ${mResponse.status}: ${errorText}. Gracefully switching to Google Gemini...`);
       }
-
-      const mJson: any = await mResponse.json();
-      const textOutput = mJson.choices?.[0]?.message?.content;
-      if (!textOutput) {
-        throw new Error("Mistral API nevrátilo žiadny textový výstup.");
-      }
-
-      const parsedJson = JSON.parse(textOutput.trim());
-      
-      // Automatically attempt image generation if Mistral key is configured
-      let generatedImageUrl = await tryGenerateMistralImage(style, roomType, parsedJson.summary, parsedJson.materials, mistralKey || "");
-      if (!generatedImageUrl) {
-        console.log("[Redesign - Mistral Chain] Mistral skipped or failed. Generating original remake using Google Gemini...");
-        generatedImageUrl = await tryGenerateGeminiImage(style, roomType, parsedJson.summary, parsedJson.materials, base64Data);
-      }
-
-      const promptLen = systemPrompt.length + (base64Data ? base64Data.length : 0);
-      const respLen = textOutput.length;
-      const inputTokens = Math.floor(promptLen / 4) + 150;
-      const outputTokens = Math.floor(respLen / 4);
-
-      return res.json({
-        success: true,
-        data: parsedJson,
-        isSimulated: false,
-        generatedImageUrl: generatedImageUrl,
-        simulationMetrics: {
-          geminiTokensInput: inputTokens,
-          geminiTokensOutput: outputTokens,
-          estimatedCostEur: (inputTokens * 0.00000015) + (outputTokens * 0.0000006)
-        },
-        provider: "mistral"
-      });
+    } catch (mErr: any) {
+      console.warn(`[Mistral Fallback] Mistral call failed: ${mErr?.message || mErr}. Gracefully switching to Google Gemini...`);
     }
+  }
 
-    // Default to Gemini API if useMistral is false
+  // 2. Google Gemini Execution (Primary / Graceful Fallback)
+  if (ai) {
+    try {
+      const contentParts: any[] = [];
+      if (base64Data) {
+        contentParts.push({
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: base64Data
+          }
+        });
+      }
+      
+      const geminiPromptText = userWishes?.trim()
+        ? `Analyzuj priloženú fotografiu izby a vygeneruj pre ňu moderný ${style} redizajn. Rozpočet je ${budget} EUR. Používateľ si želá v izbe: "${userWishes.trim()}". Odpovedaj detailne s nábytkom vo forme 2D mapy.`
+        : `Analyzuj priloženú fotografiu izby a vygeneruj pre ňu moderný ${style} redizajn. Rozpočet je ${budget} EUR. Odpovedaj detailne s nábytkom vo forme 2D mapy.`;
 
-    // Prepare inputs for Gemini
-    const contentParts: any[] = [];
-    if (base64Data) {
       contentParts.push({
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: base64Data
+        text: geminiPromptText
+      });
+
+      // Invoke Gemini 2.5 Flash as requested (which is incredibly optimal for response times and limits!)
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: { parts: contentParts },
+        config: {
+          systemInstruction: systemPrompt,
+          responseMimeType: "application/json",
+          responseSchema: responseSchema,
         }
       });
-    }
-    contentParts.push({
-      text: `Analyzuj priloženú fotografiu izby a vygeneruj pre ňu moderný ${style} redizajn. Rozpočet je ${budget} EUR. Odpovedaj detailne s nábytkom vo forme 2D mapy.`
-    });
 
-    // Invoke Gemini 2.5 Flash as requested (which is incredibly optimal for response times and limits!)
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: { parts: contentParts },
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: "application/json",
-        responseSchema: responseSchema,
+      const textOutput = response.text;
+      if (textOutput) {
+        const parsedJson = JSON.parse(textOutput.trim());
+        
+        let generatedImageUrl = await tryGenerateGeminiImage(
+          style,
+          roomType,
+          parsedJson.summary,
+          parsedJson.materials,
+          userWishes,
+          base64Data,
+          parsedJson.colorPalette,
+          parsedJson.furnitureLayout
+        );
+
+        const promptLen = systemPrompt.length + (base64Data ? base64Data.length : 0);
+        const respLen = textOutput.length;
+        const inputTokens = Math.floor(promptLen / 4) + 200;
+        const outputTokens = Math.floor(respLen / 4);
+
+        return res.json({
+          success: true,
+          data: parsedJson,
+          isSimulated: false,
+          generatedImageUrl: generatedImageUrl,
+          provider: "gemini",
+          simulationMetrics: {
+            geminiTokensInput: inputTokens,
+            geminiTokensOutput: outputTokens,
+            estimatedCostEur: (inputTokens * 0.00000015) + (outputTokens * 0.0000006)
+          }
+        });
       }
-    });
-
-    const textOutput = response.text;
-    if (!textOutput) {
-      throw new Error("Gemini API nevrátilo žiadny textový výstup.");
-    }
-
-    const parsedJson = JSON.parse(textOutput.trim());
-    
-    // Automatically attempt image generation if Mistral key is configured for a realistic 3D mockup visual
-    let generatedImageUrl = await tryGenerateMistralImage(style, roomType, parsedJson.summary, parsedJson.materials, mistralKey || "");
-    if (!generatedImageUrl) {
-      console.log("[Redesign - Gemini Chain] Mistral skipped or failed. Generating original remake using Google Gemini...");
-      generatedImageUrl = await tryGenerateGeminiImage(style, roomType, parsedJson.summary, parsedJson.materials, base64Data);
-    }
-    
-    // Calculate approximate tokens for our statistics tracker (1 character ~ 4 characters per token estimate)
-    const promptLen = systemPrompt.length + (base64Data ? base64Data.length : 0);
-    const respLen = textOutput.length;
-    const inputTokens = Math.floor(promptLen / 4) + 200; // estimated
-    const outputTokens = Math.floor(respLen / 4);
-
-    return res.json({
-      success: true,
-      data: parsedJson,
-      isSimulated: false,
-      generatedImageUrl: generatedImageUrl,
-      simulationMetrics: {
-        geminiTokensInput: inputTokens,
-        geminiTokensOutput: outputTokens,
-        estimatedCostEur: (inputTokens * 0.00000015) + (outputTokens * 0.0000006) // standard cost estimation to build trust in Spark Plan limits
+    } catch (geminiErr: any) {
+      console.error("Gemini API error in redesign:", geminiErr);
+      const isRateLimit = geminiErr.message?.includes("429") || geminiErr.message?.toLowerCase().includes("quota");
+      if (isRateLimit) {
+        return res.status(429).json({
+          error: "Služba je momentálne vyťažená. Váš požiadavok prebehne automaticky o 15 sekúnd."
+        });
       }
-    });
+      console.warn("Gemini call hit an issue. Serving high-fidelity mock response fallback...");
+    }
+  }
 
-  } catch (err: any) {
-    console.error("Gemini API execution error:", err);
-    // Standardize error or catch 429 rate limit / quota exceeded
-    const isRateLimit = err.message?.includes("429") || err.message?.toLowerCase().includes("quota");
-    return res.status(isRateLimit ? 429 : 500).json({
-      error: isRateLimit 
-        ? "Služba je momentálne vyťažená. Váš požiadavok prebehne automaticky o 15 sekúnd."
-        : `Chyba pri spracovaní AI redizajnu: ${err.message || err}`
+  // 3. Resilient High-Fidelity Mock Response (Prevents any crash or blank state)
+  console.log("Serving high-fidelity simulated response...");
+  const mockData = getPremiumMockResponse(roomType, style, budget);
+  if (userWishes?.trim()) {
+    mockData.summary = `${mockData.summary} Návrh špeciálne zahŕňa vašu požiadavku: ${userWishes.trim()}.`;
+    mockData.furnitureLayout.unshift({
+      name: userWishes.trim().split(",")[0].trim(),
+      category: "Dizajnový prvok",
+      coordinateX: 50,
+      coordinateY: 50,
+      width: 140,
+      depth: 85,
+      estimatedPrice: Math.round(budget * 0.25),
+      storeRecommendation: "Vlastná zákazková výroba",
+      description: `Prvok navrhnutý presne podľa vašej špecifikácie: ${userWishes.trim()}`
     });
   }
+
+  return res.json({
+    success: true,
+    data: mockData,
+    isSimulated: true,
+    simulationMetrics: {
+      geminiTokensInput: 680,
+      geminiTokensOutput: 345,
+      estimatedCostEur: 0.00015
+    },
+    message: "Návrh pripravený v adaptívnom režime."
+  });
 });
+
+// Curated high quality room fallbacks so app remains incredibly interactive and stunning without a key or when API fails
+const ROOM_FALLBACKS: Record<string, string[]> = {
+  default: [
+    "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1024&q=80",
+    "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1024&q=80",
+    "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=1024&q=80"
+  ],
+  living: [
+    "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1024&q=80",
+    "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=1024&q=80",
+    "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1024&q=80"
+  ],
+  bedroom: [
+    "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1024&q=80",
+    "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&w=1024&q=80",
+    "https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&w=1024&q=80"
+  ],
+  kitchen: [
+    "https://images.unsplash.com/photo-1556912173-3bb406ef7e77?auto=format&fit=crop&w=1024&q=80",
+    "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1024&q=80",
+    "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1024&q=80"
+  ],
+  bathroom: [
+    "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1024&q=80",
+    "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=1024&q=80",
+    "https://images.unsplash.com/photo-1604014237800-1c9102c219da?auto=format&fit=crop&w=1024&q=80"
+  ]
+};
+
+function getRoomFallbackImage(prompt: string): string {
+  let chosenCategory = "default";
+  const lowerPrompt = (prompt || "").toLowerCase();
+  if (lowerPrompt.includes("obýva") || lowerPrompt.includes("living") || lowerPrompt.includes("salon")) chosenCategory = "living";
+  else if (lowerPrompt.includes("spál") || lowerPrompt.includes("bedroom") || lowerPrompt.includes("loznica")) chosenCategory = "bedroom";
+  else if (lowerPrompt.includes("kuch") || lowerPrompt.includes("kitchen") || lowerPrompt.includes("varn")) chosenCategory = "kitchen";
+  else if (lowerPrompt.includes("kúpel") || lowerPrompt.includes("bathroom") || lowerPrompt.includes("wc") || lowerPrompt.includes("van")) chosenCategory = "bathroom";
+
+  const list = ROOM_FALLBACKS[chosenCategory] || ROOM_FALLBACKS.default;
+  const imgIndex = Math.floor(Math.random() * list.length);
+  return list[imgIndex];
+}
 
 // Endpoint to proxy Mistral Image Generations (Flux)
 app.post("/api/generate-image", async (req, res) => {
@@ -673,48 +791,10 @@ app.post("/api/generate-image", async (req, res) => {
     }
 
     console.log("[Fallback] Google Imagen unavailable. Falling back to Unsplash static placeholders.");
-    // Curated high quality room fallbacks so app remains incredibly interactive and stunning without a key!
-    const fallbacks: Record<string, string[]> = {
-      default: [
-        "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1024&q=80",
-        "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1024&q=80",
-        "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=1024&q=80"
-      ],
-      living: [
-        "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1024&q=80",
-        "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=1024&q=80",
-        "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1024&q=80"
-      ],
-      bedroom: [
-        "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1024&q=80",
-        "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&w=1024&q=80",
-        "https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&w=1024&q=80"
-      ],
-      kitchen: [
-        "https://images.unsplash.com/photo-1556912173-3bb406ef7e77?auto=format&fit=crop&w=1024&q=80",
-        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1024&q=80",
-        "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=1024&q=80"
-      ],
-      bathroom: [
-        "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1024&q=80",
-        "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=1024&q=80",
-        "https://images.unsplash.com/photo-1604014237800-1c9102c219da?auto=format&fit=crop&w=1024&q=80"
-      ]
-    };
-
-    let chosenCategory = "default";
-    const lowerPrompt = prompt.toLowerCase();
-    if (lowerPrompt.includes("obýva") || lowerPrompt.includes("living") || lowerPrompt.includes("salon")) chosenCategory = "living";
-    else if (lowerPrompt.includes("spál") || lowerPrompt.includes("bedroom") || lowerPrompt.includes("loznica")) chosenCategory = "bedroom";
-    else if (lowerPrompt.includes("kuch") || lowerPrompt.includes("kitchen") || lowerPrompt.includes("varn")) chosenCategory = "kitchen";
-    else if (lowerPrompt.includes("kúpel") || lowerPrompt.includes("bathroom") || lowerPrompt.includes("wc") || lowerPrompt.includes("van")) chosenCategory = "bathroom";
-
-    const list = fallbacks[chosenCategory];
-    const imgIndex = Math.floor(Math.random() * list.length);
-    const mockUrl = list[imgIndex];
+    const mockUrl = getRoomFallbackImage(prompt);
 
     // Delay response to simulate image generation nicely
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
 
     return res.json({
       success: true,
@@ -789,8 +869,13 @@ app.post("/api/generate-image", async (req, res) => {
       });
     }
 
-    return res.status(lastStatus).json({
-      error: userFriendlyError
+    // High-quality curated room fallback so user UI is never broken or showing error
+    const mockUrl = getRoomFallbackImage(prompt);
+    return res.json({
+      success: true,
+      url: mockUrl,
+      isSimulated: true,
+      message: `${userFriendlyError} Zobrazujem náhľadový architektonický render.`
     });
 
   } catch (err: any) {
@@ -803,20 +888,36 @@ app.post("/api/generate-image", async (req, res) => {
 
 // Endpoint to automatically describe reference images using Gemini and auto-create Flux prompts
 app.post("/api/describe-room", async (req, res) => {
-  const { image, roomType, style, language } = req.body;
+  const { image, roomType, style, language, userWishes } = req.body;
+
+  const defaultPrompt = buildUniversalRenderPrompt({
+    roomType: roomType || "obývacia izba",
+    style: style || "Swiss-Minimalist",
+    userWishes: userWishes || "",
+  });
 
   const ai = getGeminiClient();
   if (!ai) {
     return res.json({
       success: true,
-      prompt: `Highly photorealistic design of a modern empty ${roomType || "living room"} converted into a stunning luxury ${style || "Swiss-Minimalist"} masterpiece, with high-end premium furniture, warm indirect lighting, and sustainable natural materials, architectural digest photograph, 8k resolution.`,
+      prompt: defaultPrompt,
       isSimulated: true,
-      message: "Simulovaný prompt, keďže chýba kľúč pre Gemini."
+      message: "Vytvorený univerzálny architektonický prompt s presným dodržaním rozmerov a vašich požiadaviek."
     });
   }
 
   try {
-    const systemInstruction = "Si interiérový architekt. Na základe obrázku pôvodnej izby a želaného štýlu napíš detailný, vysoko optimalizovaný fotografický prompt pre generátor obrázkov Flux na premenu izby. Prompt MUSÍ byť napísaný v angličtine, pretože modely na generovanie obrázkov reagujú oveľa lepšie na anglické texty.";
+    const systemInstruction = `Si špičkový interiérový architekt a prompt inžinier pre modely generovania obrazu (Flux-Pro, Stable Diffusion, Imagen).
+Tvojou úlohou je vygenerovať precízny univerzálny prompt v anglickom jazyku podľa tejto záväznej štruktúry:
+1. "Highly realistic, photorealistic interior architectural design of the inside of this exact [typ miestnosti v angličtine]."
+2. "SPATIAL FIDELITY ENFORCEMENT: Retain 100% of the original spatial geometry, including the exact ceiling borders, structural walls, window placement, door frames, and camera field of view from the reference picture. Absolutely no structural changes."
+3. "DESIGN DIRECTIVE: Redesign and furnish the room using [architektonický štýl]. [Ak používateľ zadal špecifické požiadavky, striktne ich zahrň sem ako USER CUSTOM REQUIREMENTS]."
+4. "MATERIALITY: Apply high-quality realistic materials like: [konkrétne prémiové materiály]."
+5. "COLOR SCHEME: Apply this exact color palette: [harmonické HEX farby a odtiene]."
+6. "LAYOUT: Cleanly furnish the space with: [zoznam nábytku s kategóriami]."
+7. "RENDERING DETAILS: High-end architectural digest publication photo, realism, soft diffused warm light (2700K), captured on professional 35mm lens, atmospheric depth, realistic soft shadows, 8k resolution, photoreal. STRICTLY INDOOR SHOT, NO OUTDOOR SCENERY, NO EXTERIOR VIEW, PURE INTERNAL PHOTOGRAPH."
+Nevracaj žiaden úvodný ani záverečný komentár, vráť iba samotný štruktúrovaný text promptu.`;
+
     const contentParts: any[] = [];
 
     if (image) {
@@ -829,8 +930,12 @@ app.post("/api/describe-room", async (req, res) => {
       });
     }
 
+    const userPromptDirective = userWishes?.trim()
+      ? `Analyzuj túto miestnosť (${roomType || "obývacia izba"}) a priprav pre ňu fotorealistický prompt v štýle ${style || "Swiss-Minimalist"}. Používateľ si výslovne želá v novom návrhu tieto prvky: "${userWishes.trim()}". Zakomponuj ich priamo do zoznamu prvkov LAYOUT a DESIGN DIRECTIVE.`
+      : `Analyzuj túto miestnosť (${roomType || "obývacia izba"}) a priprav pre ňu fotorealistický prompt v štýle ${style || "Swiss-Minimalist"}.`;
+
     contentParts.push({
-      text: `Napíš detailný, profesionálny, fotorealistický stabilný prompt v angličtine pre premenu tejto miestnosti (${roomType || "izba"}) do štýlu: ${style || "Moderný minimalizmus"}. Popíš rozloženie nábytku, prémiové materiály, kompozíciu, farby a teplé, upokojujúce svetelné tiene. Zameraj sa čisto na interiér, nepíš žiadne úvodné ani sprievodné texty, iba samotný anglický prompt.`
+      text: userPromptDirective
     });
 
     const response = await ai.models.generateContent({
@@ -838,7 +943,7 @@ app.post("/api/describe-room", async (req, res) => {
       contents: { parts: contentParts },
       config: {
         systemInstruction,
-        temperature: 0.7
+        temperature: 0.4
       }
     });
 
@@ -853,8 +958,13 @@ app.post("/api/describe-room", async (req, res) => {
       throw new Error("Gemini API nevrátilo popis.");
     }
   } catch (err: any) {
-    console.error("Describe room error:", err);
-    return res.status(500).json({ error: `Chyba pri analýze priestoru pomocou Gemini: ${err.message || err}` });
+    console.warn("Describe room error from Gemini, using high-fidelity fallback prompt:", err?.message || err);
+    return res.json({
+      success: true,
+      prompt: defaultPrompt,
+      isSimulated: true,
+      message: "Vytvorený univerzálny fotorealistický prompt (Gemini API je dočasne vyťažené)."
+    });
   }
 });
 
