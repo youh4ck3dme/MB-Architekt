@@ -264,7 +264,8 @@ export function InteriorGenerator() {
           prompt: augmentedPrompt,
           model: model,
           size: size,
-          customKey: customKey
+          customKey: customKey,
+          image: referenceImage
         })
       });
 

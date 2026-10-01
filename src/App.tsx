@@ -1056,6 +1056,22 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
     return currentY;
   };
 
+  const handleExportJSON = () => {
+    if (!analysisResult) return;
+    try {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(analysisResult, null, 2));
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `ai_redizajn_${analysisResult.roomType.toLowerCase().replace(/\s+/g, "_")}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      document.body.removeChild(downloadAnchor);
+    } catch (err) {
+      console.error(err);
+      setErrorBanner("Niečo sa pokazilo pri exportovaní projektu do JSON.");
+    }
+  };
+
   const handleExportPDFReport = async () => {
     if (!analysisResult) return;
     setIsExportingPDF(true);
@@ -2204,67 +2220,89 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                 
                 {/* 0. BEFORE & AFTER VISUAL COMPARISON TAB */}
                 {activeTab === "visual-compare" && (
-                  <div className="space-y-8 animate-fade-in text-gray-900">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-100">
-                      <div>
-                        <h4 className="font-display font-semibold text-lg text-gray-900 leading-tight">
-                          Odhadovaný Výsledný Po Vizuál (Pred & Po)
-                        </h4>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Vyvážené interaktívne usporiadanie nábytku v štýle <span className="font-mono text-black font-semibold uppercase">{style}</span> rešpektujúce pôvodné dispozičné rozmery miestnosti.
-                        </p>
-                      </div>
-
-                      {/* Info card of current setup with action button to save stacked before/after images */}
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-                        <div className="bg-[#FAF8F5] border border-[#1C1C1C]/10 px-3 py-2 text-[11px] font-mono">
-                          <span className="text-gray-400 uppercase block text-[9px]">Zvolená Dispozícia</span>
-                          <span className="text-black font-semibold">{roomType} • {style}</span>
+                  <div className="space-y-6 sm:space-y-8 animate-fade-in text-gray-900">
+                    
+                    {/* CARD 1: OVERVIEW & ACTIONS */}
+                    <div className="bg-white border border-[#1C1C1C]/10 rounded-xs p-5 sm:p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.05)]">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="w-2 h-2 bg-[#D97706] rounded-full inline-block" />
+                            <h4 className="font-display font-semibold text-lg text-gray-900 leading-tight">
+                              Výsledný Architektonický Vizuál (Pred & Po)
+                            </h4>
+                          </div>
+                          <p className="text-xs text-gray-500 leading-relaxed max-w-2xl">
+                            Vyvážené interaktívne usporiadanie nábytku v štýle <span className="font-mono text-black font-semibold uppercase">{style}</span> rešpektujúce pôvodné dispozičné rozmery miestnosti a priestorovú geometriu.
+                          </p>
                         </div>
-                        <button
-                          onClick={handleExportStackedComparison}
-                          disabled={isExportingComparison}
-                          className="flex items-center justify-center space-x-2 bg-[#1C1C1C] hover:bg-black text-[#FAF9F6] hover:text-white px-4 py-2.5 text-xs font-mono uppercase tracking-wider transition-all select-none cursor-pointer border border-[#1C1C1C] disabled:opacity-50 active:scale-95 text-center leading-none"
-                          title="Uložiť a stiahnuť porovnanie obrázkov pod sebou pre lepšiu prehľadnosť"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>{isExportingComparison ? "Export..." : "Uložiť Pred & Po (Pod Sebou)"}</span>
-                        </button>
+
+                        {/* Info card of current setup with action button to save stacked before/after images */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-100">
+                          <div className="bg-[#FAF8F5] border border-[#1C1C1C]/10 px-3.5 py-2 text-[11px] font-mono rounded-xs">
+                            <span className="text-gray-400 uppercase block text-[9px] font-medium">Zvolená Dispozícia</span>
+                            <span className="text-black font-semibold">{roomType} • {style}</span>
+                          </div>
+                          <button
+                            onClick={handleExportStackedComparison}
+                            disabled={isExportingComparison}
+                            className="flex items-center justify-center space-x-2 bg-[#1C1C1C] hover:bg-black text-[#FAF9F6] hover:text-white px-4 py-2.5 min-h-[42px] sm:min-h-0 text-xs font-mono uppercase tracking-wider transition-all select-none cursor-pointer border border-[#1C1C1C] disabled:opacity-50 active:scale-95 text-center leading-none shadow-xs"
+                            title="Uložiť a stiahnuť porovnanie obrázkov pod sebou pre lepšiu prehľadnosť"
+                          >
+                            <Download className="w-3.5 h-3.5 shrink-0" />
+                            <span>{isExportingComparison ? "Export..." : "Uložiť Pred & Po (Pod Sebou)"}</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
 
-                    {/* INTERACTIVE COMPARISON BLOCK */}
-                    <div className="space-y-6">
-                      {/* Interactive toggle header for modes */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gray-50/80 p-4 border border-[#1C1C1C]/10 rounded-xs">
+                    {/* CARD 2: INTERACTIVE COMPARISON VIEWER */}
+                    <div className="bg-white border border-[#1C1C1C]/10 rounded-xs p-4 sm:p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] space-y-6">
+                      
+                      {/* Responsive comparison mode switcher bar */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 bg-[#FAF9F6] p-3.5 sm:p-4 border border-[#1C1C1C]/10 rounded-xs">
                         <div className="space-y-1">
-                          <span className="text-xs font-mono tracking-wider text-gray-400 uppercase block font-semibold">
-                            Interaktívny Nástroj Porovnania
-                          </span>
-                          <p className="text-[11px] text-gray-500">
-                            Vyberte si medzi bočným rezom (Split) a prelínaním (Overlay s opacitou) na detailné posúdenie zmien.
+                          <div className="flex items-center space-x-2">
+                            <Eye className="w-3.5 h-3.5 text-gray-700" />
+                            <span className="text-xs font-mono tracking-wider text-gray-800 uppercase font-bold">
+                              Interaktívny Nástroj Porovnania
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 leading-normal">
+                            Vyberte si medzi posuvným bočným rezom (Split) a plynulým prelínaním (Overlay s opacitou) na detailné posúdenie zmien.
                           </p>
                         </div>
-                        <div className="flex items-center space-x-1 bg-white p-1 border border-[#1C1C1C]/10 self-start sm:self-auto shrink-0 select-none">
+
+                        {/* Mobile-first segmented control */}
+                        <div 
+                          role="tablist"
+                          aria-label="Režim porovnávania"
+                          className="w-full sm:w-auto grid grid-cols-2 sm:flex sm:items-center gap-1.5 p-1 bg-white border border-[#1C1C1C]/15 rounded-xs shrink-0 select-none shadow-xs"
+                        >
                           <button
+                            role="tab"
+                            aria-selected={compareMode === "split"}
                             onClick={() => setCompareMode("split")}
-                            className={`px-3 py-1.5 text-[11px] font-mono uppercase tracking-wider cursor-pointer transition-all flex items-center space-x-1.5 ${
+                            className={`min-h-[44px] sm:min-h-[36px] px-3.5 py-2 sm:py-1.5 text-xs font-mono uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-2 rounded-xs active:scale-[0.98] ${
                               compareMode === "split"
-                                ? "bg-[#1C1C1C] text-white font-semibold"
-                                : "text-gray-600 hover:text-black hover:bg-gray-50"
+                                ? "bg-[#1C1C1C] text-white font-semibold shadow-xs"
+                                : "text-gray-600 hover:text-black hover:bg-gray-100/60 font-medium"
                             }`}
                           >
-                            <span>↔ Bočný Rez (Split)</span>
+                            <span className="font-bold text-sm leading-none">↔</span>
+                            <span>Bočný Rez (Split)</span>
                           </button>
                           <button
+                            role="tab"
+                            aria-selected={compareMode === "overlay"}
                             onClick={() => setCompareMode("overlay")}
-                            className={`px-3 py-1.5 text-[11px] font-mono uppercase tracking-wider cursor-pointer transition-all flex items-center space-x-1.5 ${
+                            className={`min-h-[44px] sm:min-h-[36px] px-3.5 py-2 sm:py-1.5 text-xs font-mono uppercase tracking-wider cursor-pointer transition-all flex items-center justify-center space-x-2 rounded-xs active:scale-[0.98] ${
                               compareMode === "overlay"
-                                ? "bg-[#1C1C1C] text-white font-semibold"
-                                : "text-gray-600 hover:text-black hover:bg-gray-50"
+                                ? "bg-[#1C1C1C] text-white font-semibold shadow-xs"
+                                : "text-gray-600 hover:text-black hover:bg-gray-100/60 font-medium"
                             }`}
                           >
-                            <Layers className="w-3 h-3" />
+                            <Layers className="w-3.5 h-3.5 shrink-0" />
                             <span>Prekrytie (Overlay)</span>
                           </button>
                         </div>
@@ -2272,7 +2310,7 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
 
                       {compareMode === "split" ? (
                         <div className="space-y-4">
-                          <div className="relative aspect-video w-full max-w-4xl mx-auto overflow-hidden border border-[#1C1C1C]/10 shadow-md bg-gray-100 select-none">
+                          <div className="relative aspect-video w-full max-w-4xl mx-auto overflow-hidden border border-[#1C1C1C]/10 shadow-md bg-gray-100 select-none rounded-xs">
                             
                             {/* RIGHT IMAGE (AFTER): Gorgeous Redesigned rendering */}
                             <img 
@@ -2281,7 +2319,7 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                               className="absolute inset-0 w-full h-full object-cover" 
                               referrerPolicy="no-referrer"
                             />
-                            <div className="absolute top-4 right-4 bg-[#1C1C1C]/80 backdrop-blur-xs px-2.5 py-1 text-[10px] text-white font-mono uppercase tracking-wider select-none z-10 border border-white/20">
+                            <div className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-[#1C1C1C]/85 backdrop-blur-xs px-2.5 py-1 text-[10px] text-white font-mono uppercase tracking-wider select-none z-10 border border-white/20 shadow-xs">
                               {customAfterUrl ? "Po (Vlastný AI Vizuál)" : "Po (Architektonický Návrh)"}
                             </div>
 
@@ -2298,7 +2336,7 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                                 referrerPolicy="no-referrer"
                               />
                             </div>
-                            <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-xs px-2.5 py-1 text-[10px] text-[#1C1C1C] font-mono uppercase tracking-wider select-none z-10 border border-black/10">
+                            <div className="absolute top-3 left-3 sm:top-4 sm:left-4 bg-white/95 backdrop-blur-xs px-2.5 py-1 text-[10px] text-[#1C1C1C] font-mono uppercase tracking-wider select-none z-10 border border-black/10 shadow-xs">
                               Pred (Pôvodný Stav)
                             </div>
 
@@ -2307,7 +2345,7 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                               className="absolute inset-y-0 w-1 bg-white cursor-ew-resize z-30 shadow-[0_0_10px_rgba(0,0,0,0.5)]"
                               style={{ left: `${sliderPosition}%` }}
                             >
-                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white text-black shadow-lg flex items-center justify-center font-bold text-xs select-none">
+                              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-white text-black shadow-lg flex items-center justify-center font-bold text-xs select-none border border-black/10">
                                 ↔
                               </div>
                             </div>
@@ -2320,20 +2358,23 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                               value={sliderPosition} 
                               onChange={(e) => setSliderPosition(Number(e.target.value))}
                               className="absolute inset-0 opacity-0 w-full h-full cursor-ew-resize z-40"
+                              aria-label="Posuvník pomeru pred a po"
                             />
                           </div>
 
                           {/* SLIDER ASSISTANCE */}
-                          <div className="flex justify-between text-[11px] font-mono text-gray-400 px-1 max-w-4xl mx-auto">
-                            <span>← Pôvodný poškodený/prázdny stav</span>
-                            <span className="animate-pulse text-gray-500 font-semibold">Tiahnite myšou/kliknite na plochu pre rez</span>
-                            <span>Nový Swiss Minimalistický vizuál →</span>
+                          <div className="flex flex-col sm:flex-row justify-between items-center text-[11px] font-mono text-gray-500 gap-1 px-1 max-w-4xl mx-auto text-center sm:text-left">
+                            <span className="order-2 sm:order-1 text-gray-400">← Pôvodný stav ({sliderPosition}%)</span>
+                            <span className="order-1 sm:order-2 font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-xs">
+                              Posúvajte prstom alebo myšou pre rez
+                            </span>
+                            <span className="order-3 sm:order-3 text-gray-400">Nový dizajn ({100 - sliderPosition}%) →</span>
                           </div>
                         </div>
                       ) : (
                         /* OVERLAY STATE COMPONENT WITH HIGH FIDELITY OPACITY TRANSITION */
                         <div className="space-y-4">
-                          <div className="relative aspect-video w-full max-w-4xl mx-auto overflow-hidden border border-[#1C1C1C]/10 shadow-md bg-gray-100 select-none">
+                          <div className="relative aspect-video w-full max-w-4xl mx-auto overflow-hidden border border-[#1C1C1C]/10 shadow-md bg-gray-100 select-none rounded-xs">
                             {/* Base Image: Before */}
                             <img 
                               src={imageSrc || "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&w=1200&q=80"} 
@@ -2341,7 +2382,7 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                               className="absolute inset-0 w-full h-full object-cover" 
                               referrerPolicy="no-referrer"
                             />
-                            <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-xs px-2.5 py-1 text-[10px] text-[#1C1C1C] font-mono uppercase tracking-wider select-none z-10 border border-black/10">
+                            <div className="absolute top-3 left-3 sm:top-4 sm:left-4 bg-white/95 backdrop-blur-xs px-2.5 py-1 text-[10px] text-[#1C1C1C] font-mono uppercase tracking-wider select-none z-10 border border-black/10 shadow-xs">
                               Pred (Pôvodný Stav)
                             </div>
 
@@ -2358,42 +2399,43 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                               />
                             </div>
                             <div 
-                              className="absolute top-4 right-4 bg-[#1C1C1C]/80 backdrop-blur-xs px-2.5 py-1 text-[10px] text-white font-mono uppercase tracking-wider select-none z-10 border border-white/20 transition-opacity duration-150"
+                              className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-[#1C1C1C]/85 backdrop-blur-xs px-2.5 py-1 text-[10px] text-white font-mono uppercase tracking-wider select-none z-10 border border-white/20 transition-opacity duration-150 shadow-xs"
                               style={{ opacity: Math.max(0.4, overlayOpacity / 100) }}
                             >
                               {customAfterUrl ? "Po (Vlastný AI Vizuál)" : "Po (Architektonický Návrh)"}
                             </div>
 
                             {/* Center-Bottom opacity value display badge */}
-                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-[#1C1C1C]/90 backdrop-blur-xs px-3 py-1 border border-white/10 text-[10px] font-mono text-white text-center z-10 select-none">
+                            <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 bg-[#1C1C1C]/90 backdrop-blur-xs px-3 py-1 border border-white/10 text-[10px] font-mono text-white text-center z-10 select-none shadow-md rounded-xs">
                               Priehľadnosť: <span className="text-amber-400 font-bold">{overlayOpacity}%</span>
                             </div>
                           </div>
 
                           {/* SLIDER CONTROL STATION */}
-                          <div className="bg-[#FAF8F5] border border-[#1C1C1C]/10 p-5 max-w-4xl mx-auto">
+                          <div className="bg-[#FAF9F6] border border-[#1C1C1C]/10 p-4 sm:p-5 max-w-4xl mx-auto rounded-xs">
                             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                              <div className="flex items-center space-x-3">
-                                <span className="p-2 bg-[#1C1C1C]/5 border border-[#1C1C1C]/10 text-gray-700">
+                              <div className="flex items-center space-x-3 w-full sm:w-auto">
+                                <span className="p-2 bg-[#1C1C1C]/5 border border-[#1C1C1C]/10 text-gray-700 rounded-xs shrink-0">
                                   <Layers className="w-4 h-4" />
                                 </span>
                                 <div>
-                                  <span className="text-xs font-mono font-bold uppercase text-gray-700 block">Prelínanie Obrázkov</span>
-                                  <span className="text-[10px] text-gray-400">Posúvaním meníte viditeľnosť nového dizajnu</span>
+                                  <span className="text-xs font-mono font-bold uppercase text-gray-800 block">Prelínanie Obrázkov</span>
+                                  <span className="text-[11px] text-gray-500">Plynulým posúvaním meníte viditeľnosť nového dizajnu</span>
                                 </div>
                               </div>
 
-                              <div className="w-full sm:w-72 flex items-center space-x-3 select-none">
-                                <span className="text-[10px] font-mono text-gray-400 uppercase">Pred (0%)</span>
+                              <div className="w-full sm:w-80 flex items-center space-x-3 select-none bg-white p-2.5 sm:p-2 border border-[#1C1C1C]/10 rounded-xs">
+                                <span className="text-[10px] font-mono text-gray-500 uppercase shrink-0 font-medium">Pred (0%)</span>
                                 <input 
                                   type="range" 
                                   min="0" 
                                   max="100" 
                                   value={overlayOpacity} 
                                   onChange={(e) => setOverlayOpacity(Number(e.target.value))}
-                                  className="flex-1 accent-[#1C1C1C] h-1 bg-gray-200 cursor-ew-resize"
+                                  className="flex-1 accent-[#1C1C1C] h-2 bg-gray-200 cursor-ew-resize rounded-lg"
+                                  aria-label="Priehľadnosť prekrytia"
                                 />
-                                <span className="text-[10px] font-mono text-black font-semibold uppercase">Po ({overlayOpacity}%)</span>
+                                <span className="text-[10px] font-mono text-black font-bold uppercase shrink-0">Po ({overlayOpacity}%)</span>
                               </div>
                             </div>
                           </div>
@@ -2401,12 +2443,12 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                       )}
                     </div>
 
-                    {/* PROMPT GENERATION TOOL FOR MISTRAL / MIDJOURNEY GENERATORS */}
-                    <div className="bg-[#FAF8F5] border border-[#1C1C1C]/10 p-6 space-y-6">
+                    {/* CARD 3: PROMPT GENERATION FOR EXTERNAL AI MODELS */}
+                    <div className="bg-white border border-[#1C1C1C]/10 rounded-xs p-5 sm:p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] space-y-6">
                       <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                         <div className="space-y-1">
                           <h5 className="font-display font-semibold text-sm text-gray-900 uppercase tracking-wide flex items-center space-x-2">
-                            <Sparkles className="w-4 h-4 text-black shrink-0" />
+                            <Sparkles className="w-4 h-4 text-[#D97706] shrink-0" />
                             <span>1. Systémový Prompt pre AI Obrázkové Modelovanie</span>
                           </h5>
                           <p className="text-xs text-gray-500 max-w-2xl leading-relaxed">
@@ -2420,10 +2462,10 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                             setCopiedPrompt(true);
                             setTimeout(() => setCopiedPrompt(false), 2000);
                           }}
-                          className={`py-2 px-4 text-xs font-mono uppercase tracking-wider shrink-0 transition-all cursor-pointer flex items-center space-x-2 border border-[#1C1C1C] ${
+                          className={`w-full sm:w-auto py-2.5 px-4 text-xs font-mono uppercase tracking-wider shrink-0 transition-all cursor-pointer flex items-center justify-center space-x-2 border min-h-[42px] sm:min-h-0 ${
                             copiedPrompt 
                               ? "bg-green-600 text-white border-green-600 font-bold" 
-                              : "bg-[#1C1C1C] text-[#FAF9F6] border-[#1C1C1C] hover:bg-black font-semibold"
+                              : "bg-[#1C1C1C] text-[#FAF9F6] border-[#1C1C1C] hover:bg-black font-semibold shadow-xs"
                           }`}
                         >
                           {copiedPrompt ? (
@@ -2441,40 +2483,42 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                       </div>
 
                       {/* VIEW OF THE PROMPT */}
-                      <div className="bg-white border border-[#1C1C1C]/10 p-4 font-mono text-xs text-gray-700 whitespace-pre-wrap select-all leading-relaxed relative max-h-[160px] overflow-y-auto">
+                      <div className="bg-[#FAF9F6] border border-[#1C1C1C]/10 p-4 font-mono text-xs text-gray-700 whitespace-pre-wrap select-all leading-relaxed relative max-h-[160px] overflow-y-auto rounded-xs">
                         {generateImgPrompt()}
                       </div>
+                    </div>
 
-                      {/* OVERRIDE WITH REAL PHOTO GENERATOR */}
-                      <div className="pt-2 border-t border-[#1C1C1C]/5 space-y-4">
-                        <div className="space-y-1">
-                          <label className="text-xs font-mono tracking-wider text-gray-500 uppercase block font-bold">
-                            2. Testovanie s Vaším vygenerovaným real photo návrhom
-                          </label>
-                          <p className="text-[11px] text-gray-400">
-                            Vložte URL alebo odkaz na vašu vygenerovanú fotografiu (napr. z Discordu, Imgbb, Pinterestu) a okamžite ju prepojte so schémou priestoru.
-                          </p>
-                        </div>
+                    {/* CARD 4: OVERRIDE WITH EXTERNAL PHOTO TEST */}
+                    <div className="bg-white border border-[#1C1C1C]/10 rounded-xs p-5 sm:p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] space-y-4">
+                      <div className="space-y-1">
+                        <label className="text-xs font-mono tracking-wider text-gray-700 uppercase block font-bold flex items-center space-x-2">
+                          <ImageIcon className="w-3.5 h-3.5 text-black shrink-0" />
+                          <span>2. Testovanie s Vaším vygenerovaným real photo návrhom</span>
+                        </label>
+                        <p className="text-[11px] text-gray-500">
+                          Vložte URL alebo odkaz na vašu vygenerovanú fotografiu (napr. z Discordu, Imgbb, Pinterestu) a okamžite ju prepojte so schémou priestoru.
+                        </p>
+                      </div>
 
-                        <div className="flex gap-2">
-                          <input 
-                            type="text" 
-                            placeholder="https://odkaz-na-obrazok.jpg" 
-                            value={customAfterUrl || ""}
-                            onChange={(e) => setCustomAfterUrl(e.target.value || null)}
-                            className="flex-1 bg-white border border-[#1C1C1C]/10 py-2 px-3 text-xs font-mono focus:outline-none focus:border-[#1C1C1C] rounded-none text-gray-800"
-                          />
-                          {customAfterUrl && (
-                            <button 
-                              onClick={() => setCustomAfterUrl(null)}
-                              className="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 text-xs font-mono border border-red-200 uppercase transition-all whitespace-nowrap shrink-0 cursor-pointer"
-                            >
-                              Reset
-                            </button>
-                          )}
-                        </div>
+                      <div className="flex flex-col sm:flex-row gap-2.5">
+                        <input 
+                          type="text" 
+                          placeholder="https://odkaz-na-obrazok.jpg" 
+                          value={customAfterUrl || ""}
+                          onChange={(e) => setCustomAfterUrl(e.target.value || null)}
+                          className="flex-1 bg-[#FAF9F6] border border-[#1C1C1C]/15 py-2.5 px-3.5 text-xs font-mono focus:outline-none focus:border-[#1C1C1C] focus:bg-white rounded-xs text-gray-800 transition-colors"
+                        />
+                        {customAfterUrl && (
+                          <button 
+                            onClick={() => setCustomAfterUrl(null)}
+                            className="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2.5 min-h-[42px] sm:min-h-0 text-xs font-mono border border-red-200 uppercase transition-all whitespace-nowrap shrink-0 cursor-pointer font-medium rounded-xs text-center"
+                          >
+                            Resetovať Vlastný Vizuál
+                          </button>
+                        )}
                       </div>
                     </div>
+
                   </div>
                 )}
                 
@@ -2654,24 +2698,34 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                           Stiahnite si vysoko detailný, tlačený report s 2D plánom, odporúčanými materiálmi, farebným rozborom a kompletným nákupným zoznamom.
                         </p>
                       </div>
-                      <button
-                        onClick={handleExportPDFReport}
-                        disabled={isExportingPDF}
-                        id="export-pdf-report-btn-analysis"
-                        className="w-full sm:w-auto px-5 py-2.5 bg-[#1C1C1C] text-white hover:bg-[#333333] font-mono text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        {isExportingPDF ? (
-                          <>
-                            <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            <span>Generujem PDF...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Download className="w-3.5 h-3.5" />
-                            <span>Stiahnuť PDF Report</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto shrink-0">
+                        <button
+                          onClick={handleExportJSON}
+                          id="export-json-btn-analysis"
+                          className="w-full sm:w-auto px-5 py-2.5 border border-[#1C1C1C]/20 bg-white hover:bg-gray-50 text-[#1C1C1C] font-mono text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Exportovať do JSON</span>
+                        </button>
+                        <button
+                          onClick={handleExportPDFReport}
+                          disabled={isExportingPDF}
+                          id="export-pdf-report-btn-analysis"
+                          className="w-full sm:w-auto px-5 py-2.5 bg-[#1C1C1C] text-white hover:bg-[#333333] font-mono text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {isExportingPDF ? (
+                            <>
+                              <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              <span>Generujem PDF...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Stiahnuť PDF Report</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
 
                     {/* Slovak critique segment */}
@@ -2778,24 +2832,34 @@ RENDERING DETAILS: High-end architectural digest publication photo, realism, sof
                           Stiahnite si vysoko detailný, tlačený report s 2D plánom, odporúčanými materiálmi, farebným rozborom a kompletným nákupným zoznamom.
                         </p>
                       </div>
-                      <button
-                        onClick={handleExportPDFReport}
-                        disabled={isExportingPDF}
-                        id="export-pdf-report-btn-shopping"
-                        className="w-full sm:w-auto px-5 py-2.5 bg-[#1C1C1C] text-white hover:bg-[#333333] font-mono text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        {isExportingPDF ? (
-                          <>
-                            <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            <span>Generujem PDF...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Download className="w-3.5 h-3.5" />
-                            <span>Stiahnuť PDF Report</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto shrink-0">
+                        <button
+                          onClick={handleExportJSON}
+                          id="export-json-btn-shopping"
+                          className="w-full sm:w-auto px-5 py-2.5 border border-[#1C1C1C]/20 bg-white hover:bg-gray-50 text-[#1C1C1C] font-mono text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Exportovať do JSON</span>
+                        </button>
+                        <button
+                          onClick={handleExportPDFReport}
+                          disabled={isExportingPDF}
+                          id="export-pdf-report-btn-shopping"
+                          className="w-full sm:w-auto px-5 py-2.5 bg-[#1C1C1C] text-white hover:bg-[#333333] font-mono text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {isExportingPDF ? (
+                            <>
+                              <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              <span>Generujem PDF...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Stiahnuť PDF Report</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
 
                     <span className="block md:hidden text-[9px] font-mono text-gray-500 bg-[#1C1C1C]/5 py-1.5 px-3 mb-2 text-center select-none animate-pulse uppercase tracking-wider">
